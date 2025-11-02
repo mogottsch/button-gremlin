@@ -42,7 +42,7 @@ export async function createWebServer(client: Client, apiKey: string, port: numb
       },
       servers: [
         {
-          url: `http://localhost:${port}`,
+          url: '/',
         },
       ],
       components: {
