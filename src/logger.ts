@@ -43,30 +43,28 @@ export function createLoggerFromConfig(config: Config): pino.Logger {
   });
 }
 
-export function createFastifyLogger(config: Config): pino.Logger {
-  const loggerConfig = {
+export function createFastifyLogger(config: Config): pino.LoggerOptions | pino.Logger {
+  const loggerConfig: pino.LoggerOptions = {
     level: config.logging.level,
   };
 
   if (config.logging.pretty) {
-    return pino(
-      loggerConfig,
-      pino.transport({
-        target: 'pino-pretty',
-        options: {
-          colorize: true,
-          translateTime: 'HH:MM:ss Z',
-          ignore: 'pid,hostname',
-        },
-      })
-    );
+    loggerConfig.transport = {
+      target: 'pino-pretty',
+      options: {
+        colorize: true,
+        translateTime: 'HH:MM:ss Z',
+        ignore: 'pid,hostname',
+      },
+    };
+    return loggerConfig;
   }
 
   if (config.logging.destination) {
     return pino(loggerConfig, pino.destination(config.logging.destination));
   }
 
-  return pino(loggerConfig);
+  return loggerConfig;
 }
 
 const logLevel = (process.env['LOG_LEVEL'] ?? 'info').toLowerCase() as LogLevel;
