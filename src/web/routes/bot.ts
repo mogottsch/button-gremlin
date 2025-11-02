@@ -56,7 +56,9 @@ export function createBotRoutes(client: Client): FastifyPluginAsync {
             return reply.status(404).send({ success: false, message: 'Sound not found' });
           }
 
-          await botService.playSound(client, sound.path);
+          void botService.playSound(client, sound.path).catch((error) => {
+            fastify.log.error({ err: error, soundName }, 'Error playing sound in background');
+          });
 
           return {
             success: true,
