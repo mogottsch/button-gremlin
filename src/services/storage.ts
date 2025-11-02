@@ -9,6 +9,7 @@ export interface SoundFile {
   displayName: string;
   path: string;
   size: number;
+  uploadedAt: Date;
 }
 
 export async function listSoundFiles(): Promise<SoundFile[]> {
@@ -18,7 +19,7 @@ export async function listSoundFiles(): Promise<SoundFile[]> {
 
     for (const file of files) {
       const ext = extname(file).toLowerCase();
-      
+
       if (!ALLOWED_EXTENSIONS.includes(ext)) {
         continue;
       }
@@ -33,6 +34,7 @@ export async function listSoundFiles(): Promise<SoundFile[]> {
           displayName: nameWithoutExt,
           path: filePath,
           size: stats.size,
+          uploadedAt: stats.birthtime,
         });
       }
     }
@@ -59,7 +61,7 @@ export function validateFileName(fileName: string): string {
 export async function saveSoundFile(fileName: string, data: Buffer): Promise<string> {
   const { writeFile, access } = await import('fs/promises');
   const { constants } = await import('fs');
-  
+
   try {
     await access(SOUNDS_DIR, constants.W_OK);
   } catch {
@@ -67,15 +69,15 @@ export async function saveSoundFile(fileName: string, data: Buffer): Promise<str
   }
 
   const sanitizedName = validateFileName(fileName);
-  
+
   if (!sanitizedName || sanitizedName.length === 0) {
     throw new Error('Invalid file name after sanitization');
   }
 
   const filePath = join(SOUNDS_DIR, sanitizedName);
-  
+
   await writeFile(filePath, data);
-  
+
   return filePath;
 }
 
@@ -84,4 +86,3 @@ export function formatFileSize(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(2)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
-

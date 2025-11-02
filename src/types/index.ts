@@ -8,6 +8,11 @@ import {
 export interface Config {
   token: string;
   clientId: string;
+  web: {
+    enabled: boolean;
+    port: number;
+    apiKey: string;
+  };
 }
 
 export interface Command {

@@ -6,7 +6,7 @@ import prettierConfig from 'eslint-config-prettier';
 
 export default [
   {
-    ignores: ['dist/**', 'node_modules/**', '*.config.js', '.husky/**'],
+    ignores: ['dist/**', 'node_modules/**', '*.config.js', '.husky/**', 'web/**'],
   },
   {
     files: ['**/*.ts'],

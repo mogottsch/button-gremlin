@@ -15,5 +15,17 @@ export function getConfig(): Config {
     throw new Error('DISCORD_CLIENT_ID is required in environment variables');
   }
 
-  return { token, clientId };
+  const webEnabled = process.env['WEB_ENABLED'] === 'true';
+  const webPort = parseInt(process.env['WEB_PORT'] ?? '3000', 10);
+  const webApiKey = process.env['WEB_API_KEY'] ?? '';
+
+  if (webEnabled && !webApiKey) {
+    throw new Error('WEB_API_KEY is required when WEB_ENABLED=true');
+  }
+
+  return {
+    token,
+    clientId,
+    web: { enabled: webEnabled, port: webPort, apiKey: webApiKey },
+  };
 }

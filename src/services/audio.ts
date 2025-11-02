@@ -16,6 +16,14 @@ import { createReadStream } from 'fs';
 const connections = new Map<string, VoiceConnection>();
 const players = new Map<string, AudioPlayer>();
 
+export function getConnection(guildId: string): VoiceConnection | undefined {
+  return connections.get(guildId);
+}
+
+export function getAllConnections(): Map<string, VoiceConnection> {
+  return connections;
+}
+
 export async function connectToVoiceChannel(channel: VoiceBasedChannel): Promise<VoiceConnection> {
   const guildId = channel.guild.id;
 
