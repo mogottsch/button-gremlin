@@ -1,0 +1,16 @@
+node_modules
+dist
+*.log
+.env
+.env.local
+.env.*.local
+coverage
+.DS_Store
+*.lock
+pnpm-lock.yaml
+.idea
+.vscode
+*.swp
+*.swo
+*~
+tsconfig.tsbuildinfo
