@@ -58,20 +58,27 @@ export async function playSound(client: Client, soundPath: string): Promise<void
 
     for (const guild of client.guilds.cache.values()) {
       try {
+        await guild.members.fetch();
         await guild.channels.fetch();
 
-        for (const channel of guild.channels.cache.values()) {
-          if (channel.isVoiceBased()) {
-            const members = channel.members;
+        const channelsWithMembers = new Set<string>();
 
-            if (members.size > 0) {
-              const botMember = members.get(client.user.id);
-              if (!botMember) {
-                const permissions = channel.permissionsFor(client.user);
-                if (permissions?.has(['Connect', 'Speak'])) {
-                  targetChannel = channel;
-                  break;
-                }
+        for (const member of guild.members.cache.values()) {
+          const voiceChannel = member.voice.channel;
+          if (voiceChannel && member.id !== client.user.id) {
+            channelsWithMembers.add(voiceChannel.id);
+          }
+        }
+
+        for (const channel of guild.channels.cache.values()) {
+          if (channel.isVoiceBased() && channelsWithMembers.has(channel.id)) {
+            const botMember = guild.members.cache.get(client.user.id);
+            const voiceState = botMember?.voice;
+            if (!voiceState?.channel || voiceState.channel.id !== channel.id) {
+              const permissions = channel.permissionsFor(client.user);
+              if (permissions?.has(['Connect', 'Speak'])) {
+                targetChannel = channel;
+                break;
               }
             }
           }

@@ -13,6 +13,11 @@ export interface Config {
     port: number;
     apiKey: string;
   };
+  logging: {
+    level: 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal';
+    pretty: boolean;
+    destination?: string;
+  };
 }
 
 export interface Command {

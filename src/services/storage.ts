@@ -1,5 +1,6 @@
 import { readdir, stat } from 'fs/promises';
 import { join, extname, basename } from 'path';
+import { logger } from '../logger.js';
 
 const SOUNDS_DIR = 'sounds';
 const ALLOWED_EXTENSIONS = ['.mp3', '.wav', '.ogg', '.m4a', '.flac', '.webm', '.opus'];
@@ -41,7 +42,7 @@ export async function listSoundFiles(): Promise<SoundFile[]> {
 
     return soundFiles.sort((a, b) => a.name.localeCompare(b.name));
   } catch (error) {
-    console.error('Error listing sound files:', error);
+    logger.error({ err: error }, 'Error listing sound files');
     return [];
   }
 }

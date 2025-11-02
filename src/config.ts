@@ -23,9 +23,26 @@ export function getConfig(): Config {
     throw new Error('WEB_API_KEY is required when WEB_ENABLED=true');
   }
 
+  const logLevel = (process.env['LOG_LEVEL'] ?? 'info').toLowerCase() as
+    | 'trace'
+    | 'debug'
+    | 'info'
+    | 'warn'
+    | 'error'
+    | 'fatal';
+  const prettyLog =
+    process.env['LOG_PRETTY'] === 'true' ||
+    (process.env['LOG_PRETTY'] === undefined && process.env['NODE_ENV'] !== 'production');
+  const logDestination = process.env['LOG_DESTINATION'];
+
   return {
     token,
     clientId,
     web: { enabled: webEnabled, port: webPort, apiKey: webApiKey },
+    logging: {
+      level: logLevel,
+      pretty: prettyLog,
+      destination: logDestination,
+    },
   };
 }

@@ -2,6 +2,7 @@ import { SlashCommandBuilder, GuildMember } from 'discord.js';
 import type { Command } from '../types/index.js';
 import { listSoundFiles, getSoundFile } from '../services/storage.js';
 import { connectToVoiceChannel, playAudioFile } from '../services/audio.js';
+import { logger } from '../logger.js';
 
 export const play: Command = {
   data: new SlashCommandBuilder()
@@ -52,7 +53,7 @@ export const play: Command = {
 
       await playAudioFile(connection, guildId, soundFile.path);
     } catch (error) {
-      console.error('Error playing sound:', error);
+      logger.error({ err: error, soundName, guildId: interaction.guildId }, 'Error playing sound');
       await interaction.editReply(
         '❌ Failed to play sound. Make sure the bot has proper permissions.'
       );

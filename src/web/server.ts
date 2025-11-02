@@ -16,10 +16,19 @@ import { createAuthPlugin } from './plugins/auth.js';
 import { createSoundsRoutes } from './routes/sounds.js';
 import { createBotRoutes } from './routes/bot.js';
 import { createAuthRoutes } from './routes/auth.js';
+import { createFastifyLogger } from '../logger.js';
+import type { Config } from '../types/index.js';
 
-export async function createWebServer(client: Client, apiKey: string, port: number): Promise<void> {
+export async function createWebServer(
+  client: Client,
+  apiKey: string,
+  port: number,
+  config: Config
+): Promise<void> {
+  const fastifyLogger = createFastifyLogger(config);
+
   const app = Fastify({
-    logger: false,
+    logger: fastifyLogger,
   }).withTypeProvider<ZodTypeProvider>();
 
   app.setValidatorCompiler(validatorCompiler);
@@ -83,18 +92,19 @@ export async function createWebServer(client: Client, apiKey: string, port: numb
       return reply.sendFile('index.html');
     });
   } else {
-    console.log(
-      `⚠️  Frontend dist not found at ${webDistPath} - build the frontend with 'cd web && pnpm build'`
+    app.log.warn(
+      { webDistPath },
+      'Frontend dist not found - build the frontend with "cd web && pnpm build"'
     );
   }
 
   try {
     await app.listen({ port, host: '0.0.0.0' });
-    console.log(`🌐 Web server running on http://localhost:${port}`);
-    console.log(`📱 Frontend available at http://localhost:${port}`);
-    console.log(`📚 API docs available at http://localhost:${port}/docs`);
+    app.log.info({ port }, 'Web server started');
+    app.log.info({ port }, 'Frontend available');
+    app.log.info({ port, docsPath: '/docs' }, 'API docs available');
   } catch (err) {
-    app.log.error(err);
+    app.log.error({ err }, 'Failed to start web server');
     process.exit(1);
   }
 }
