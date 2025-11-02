@@ -1,9 +1,12 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import multipart from '@fastify/multipart';
+import fastifyStatic from '@fastify/static';
 import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
 import { Client } from 'discord.js';
+import path from 'path';
+import { existsSync } from 'fs';
 import {
   serializerCompiler,
   validatorCompiler,
@@ -65,14 +68,33 @@ export async function createWebServer(client: Client, apiKey: string, port: numb
     await fastify.register(createBotRoutes(client), { prefix: '/api/bot' });
   });
 
+  const webDistPath = path.join(process.cwd(), 'web/dist');
+
+  if (existsSync(webDistPath)) {
+    await app.register(fastifyStatic, {
+      root: webDistPath,
+      prefix: '/',
+    });
+
+    app.setNotFoundHandler((request, reply) => {
+      if (request.url.startsWith('/api')) {
+        return reply.code(404).send({ error: 'Not found' });
+      }
+      return reply.sendFile('index.html');
+    });
+  } else {
+    console.log(
+      `⚠️  Frontend dist not found at ${webDistPath} - build the frontend with 'cd web && pnpm build'`
+    );
+  }
+
   try {
     await app.listen({ port, host: '0.0.0.0' });
     console.log(`🌐 Web server running on http://localhost:${port}`);
+    console.log(`📱 Frontend available at http://localhost:${port}`);
     console.log(`📚 API docs available at http://localhost:${port}/docs`);
   } catch (err) {
     app.log.error(err);
     process.exit(1);
   }
-
-  return app;
 }

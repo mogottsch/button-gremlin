@@ -17,6 +17,9 @@ dependencies:
   '@fastify/multipart':
     specifier: ^9.3.0
     version: 9.3.0
+  '@fastify/static':
+    specifier: ^8.0.1
+    version: 8.3.0
   '@fastify/swagger':
     specifier: ^9.5.2
     version: 9.5.2
