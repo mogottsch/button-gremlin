@@ -79,7 +79,11 @@ export function SoundCard({ sound, onPlay, onDelete }: SoundCardProps) {
           </div>
         </CardContent>
         <CardFooter className="flex gap-2 pt-3">
-          <Button size="sm" onClick={() => onPlay(sound)} className="flex-1">
+          <Button
+            size="sm"
+            onClick={() => onPlay(sound)}
+            className="flex-1 cursor-pointer bg-green-500 hover:bg-green-600 text-white"
+          >
             <Play />
             Browser
           </Button>
@@ -88,12 +92,17 @@ export function SoundCard({ sound, onPlay, onDelete }: SoundCardProps) {
             variant="secondary"
             onClick={handlePlayInDiscord}
             disabled={isPlayingDiscord}
-            className="flex-1"
+            className="flex-1 cursor-pointer bg-blue-500 hover:bg-blue-600 text-white"
           >
             <Music />
             Discord
           </Button>
-          <Button size="sm" variant="destructive" onClick={() => setShowDeleteDialog(true)}>
+          <Button
+            size="sm"
+            variant="destructive"
+            onClick={() => setShowDeleteDialog(true)}
+            className="cursor-pointer"
+          >
             <Trash2 />
           </Button>
         </CardFooter>

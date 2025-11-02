@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import type { Sound } from '@backend/web/schemas/index.js';
 import { api } from '../services/api';
 import { SoundCard } from './SoundCard';
@@ -6,10 +6,23 @@ import { UploadForm } from './UploadForm';
 import { Input } from './ui/input';
 import { Button } from './ui/button';
 import { Search, Upload, Loader2, Music } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface SoundListProps {
   onPlaySound: (sound: Sound) => void;
 }
+
+const ALLOWED_TYPES = [
+  'audio/mpeg',
+  'audio/wav',
+  'audio/ogg',
+  'audio/mp4',
+  'audio/flac',
+  'audio/webm',
+  'audio/opus',
+];
+const ALLOWED_EXTENSIONS = ['.mp3', '.wav', '.ogg', '.m4a', '.flac', '.webm', '.opus'];
+const MAX_SIZE = 10 * 1024 * 1024;
 
 export function SoundList({ onPlaySound }: SoundListProps) {
   const [sounds, setSounds] = useState<Sound[]>([]);
@@ -17,6 +30,21 @@ export function SoundList({ onPlaySound }: SoundListProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [showUpload, setShowUpload] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+
+  const validateFile = useCallback((file: File): string | null => {
+    const ext = file.name.toLowerCase().match(/\.[^.]+$/)?.[0];
+
+    if (!ALLOWED_TYPES.includes(file.type) && !(ext && ALLOWED_EXTENSIONS.includes(ext))) {
+      return 'Invalid file type. Allowed: mp3, wav, ogg, m4a, flac, webm, opus';
+    }
+
+    if (file.size > MAX_SIZE) {
+      return 'File too large. Maximum size is 10MB';
+    }
+
+    return null;
+  }, []);
 
   const loadSounds = async () => {
     try {
@@ -46,6 +74,36 @@ export function SoundList({ onPlaySound }: SoundListProps) {
     void loadSounds();
   };
 
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const droppedFile = e.dataTransfer.files[0];
+    if (droppedFile) {
+      const error = validateFile(droppedFile);
+      if (error) {
+        toast.error(error);
+        return;
+      }
+      try {
+        await api.sounds.upload(droppedFile);
+        toast.success('Sound uploaded successfully');
+        void loadSounds();
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : 'Upload failed');
+      }
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-16">
@@ -66,10 +124,20 @@ export function SoundList({ onPlaySound }: SoundListProps) {
             className="pl-10"
           />
         </div>
-        <Button onClick={() => setShowUpload(true)}>
-          <Upload />
-          Upload
-        </Button>
+        <div
+          className={`flex items-center gap-2 rounded-md border-2 border-dashed px-4 py-3 transition-all cursor-pointer ${
+            isDragging
+              ? 'border-primary bg-primary/5'
+              : 'border-border hover:border-primary/50 hover:bg-accent/5'
+          }`}
+          onClick={() => setShowUpload(true)}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+        >
+          <Upload className="h-4 w-4" />
+          <span className="text-sm font-medium">Upload</span>
+        </div>
       </div>
 
       {filteredSounds.length === 0 ? (
