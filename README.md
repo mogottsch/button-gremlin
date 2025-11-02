@@ -2,34 +2,65 @@
 
 Discord soundboard bot that plays sounds on command, with a modern web UI for managing and playing sounds.
 
-## Setup
+## Quick Start
 
-### Bot Setup
+### Docker (Production)
 
-1. Install dependencies: `pnpm install`
-2. Copy `.env.example` to `.env` and configure:
+Pull and run from GitHub Container Registry:
 
-   ```env
-   DISCORD_TOKEN=your_bot_token_here
-   DISCORD_CLIENT_ID=your_client_id_here
-   DISCORD_GUILD_ID=
+```bash
+docker pull ghcr.io/mogottsch/button-gremlin:latest
 
-   # Web UI (optional)
-   WEB_ENABLED=true
-   WEB_PORT=3000
-   WEB_API_KEY=your-secret-key-here
+docker run -p 3000:3000 \
+  -v /path/to/sounds:/app/sounds \
+  -e DISCORD_TOKEN=your_token \
+  -e DISCORD_CLIENT_ID=your_client_id \
+  -e WEB_ENABLED=true \
+  -e WEB_PORT=3000 \
+  -e WEB_API_KEY=your_api_key \
+  ghcr.io/mogottsch/button-gremlin:latest
+```
+
+Mount `/app/sounds` to persist uploaded sounds across container restarts.
+
+### Development
+
+1. Install dependencies:
+
+   ```bash
+   pnpm install
+   cd web && pnpm install && cd ..
    ```
 
-3. Deploy commands: `pnpm run deploy`
-4. Start bot: `pnpm run dev`
+2. Configure environment:
 
-### Web UI Setup
+   ```bash
+   cp .env.example .env
+   ```
 
-1. Navigate to the web directory: `cd web`
-2. Install frontend dependencies: `pnpm install`
-3. Start the development server: `pnpm run dev`
+   Edit `.env` with your Discord bot token, client ID, and optional web settings.
 
-The web UI will be available at `http://localhost:5173`
+3. Deploy Discord commands:
+
+   ```bash
+   pnpm run deploy
+   ```
+
+4. Start development:
+
+   ```bash
+   # Terminal 1: Backend
+   pnpm run dev
+
+   # Terminal 2: Frontend (optional - backend serves frontend in production)
+   cd web && pnpm run dev
+   ```
+
+5. Production build:
+   ```bash
+   pnpm run build:all
+   pnpm start
+   ```
 
 ## Discord Commands
 
@@ -41,41 +72,19 @@ The web UI will be available at `http://localhost:5173`
 
 ## Web UI Features
 
-- 🔐 **Secure Login** - API key authentication
-- 🎵 **Sound Management** - Upload, delete, and organize sounds
-- 🎮 **Dual Playback** - Play sounds in browser or Discord
-- 🔍 **Search & Filter** - Quickly find sounds
-- 📱 **Responsive Design** - Works on desktop and mobile
-- 🌙 **Dark Mode** - Built-in dark theme support
-
-## Development
-
-### Running Both Services
-
-**Terminal 1** - Backend (Bot + API):
-
-```bash
-pnpm run dev
-```
-
-**Terminal 2** - Frontend (React):
-
-```bash
-cd web && pnpm run dev
-```
-
-### Production Build
-
-1. Build frontend: `cd web && pnpm run build`
-2. Build backend: `pnpm run build`
-3. Start: `pnpm run start`
+- 🔐 Secure API key authentication
+- 🎵 Upload, delete, and play sounds
+- 🎮 Play sounds in browser or Discord
+- 🔍 Search and filter sounds
+- 📱 Responsive design
 
 ## Architecture
 
-- **Backend**: Node.js + TypeScript + Express + Discord.js
+- **Backend**: Node.js + TypeScript + Fastify + Discord.js
 - **Frontend**: React + TypeScript + Vite + Tailwind CSS + shadcn/ui
 - **Validation**: Zod schemas shared between backend and frontend
-- **Authentication**: Simple API key-based auth
+- **Static Serving**: Frontend served by Fastify with @fastify/static
+- **CI/CD**: GitHub Actions builds and pushes to GHCR on push to main
 
 ## License
 
