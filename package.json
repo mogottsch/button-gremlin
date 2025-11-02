@@ -1,6 +1,6 @@
 {
   "name": "button-gremlin",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "Modern Discord soundboard bot",
   "type": "module",
   "main": "dist/index.js",
