@@ -121,7 +121,7 @@ export function SoundList({ onPlaySound }: SoundListProps) {
             placeholder="Search sounds..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10"
+            className="pl-10 h-[48px]"
           />
         </div>
         <div
@@ -136,7 +136,7 @@ export function SoundList({ onPlaySound }: SoundListProps) {
           onDrop={handleDrop}
         >
           <Upload className="h-4 w-4" />
-          <span className="text-sm font-medium">Upload</span>
+          <span className="text-sm font-medium">Drag or Click to Upload</span>
         </div>
       </div>
 
@@ -155,7 +155,7 @@ export function SoundList({ onPlaySound }: SoundListProps) {
           )}
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 items-start">
           {filteredSounds.map((sound) => (
             <SoundCard key={sound.name} sound={sound} onPlay={onPlaySound} onDelete={loadSounds} />
           ))}

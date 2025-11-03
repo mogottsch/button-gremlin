@@ -11,9 +11,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from './ui/dialog';
-import { Play, Music, Trash2 } from 'lucide-react';
+import { Play, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
 import { api } from '../services/api';
 import { toast } from 'sonner';
+import DiscordIcon from '../assets/discordIcon.svg';
 
 interface SoundCardProps {
   sound: Sound;
@@ -24,6 +25,7 @@ interface SoundCardProps {
 export function SoundCard({ sound, onPlay, onDelete }: SoundCardProps) {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isPlayingDiscord, setIsPlayingDiscord] = useState(false);
+  const [isDetailsExpanded, setIsDetailsExpanded] = useState(false);
 
   const formatSize = (bytes: number) => {
     if (bytes < 1024) return `${bytes} B`;
@@ -61,50 +63,67 @@ export function SoundCard({ sound, onPlay, onDelete }: SoundCardProps) {
 
   return (
     <>
-      <Card className="group transition-all hover:border-primary/50 hover:shadow-lg hover:shadow-primary/10">
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Music className="h-4 w-4 text-primary" />
-            <span className="truncate">{sound.displayName}</span>
+      <Card className="group transition-all hover:border-primary/50 hover:shadow-lg hover:shadow-primary/10 h-fit relative max-w-[240px]">
+        <CardHeader className="pb-3 px-4 pt-4">
+          <CardTitle className="flex items-center gap-2 text-base justify-center h-12">
+            <span className="text-center leading-tight line-clamp-2" title={sound.displayName}>
+              {sound.displayName}
+            </span>
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3 pb-3">
-          <div className="flex gap-2">
-            <Badge variant="secondary" className="text-xs">
-              {formatSize(sound.size)}
-            </Badge>
-            <Badge variant="outline" className="text-xs">
-              {formatDate(sound.uploadedAt)}
-            </Badge>
+        <CardContent className="space-y-3 pb-0 px-4">
+          <div className="flex gap-2 justify-center">
+            <Button
+              size="icon"
+              onClick={() => onPlay(sound)}
+              className="cursor-pointer bg-green-500 hover:bg-green-600 text-white aspect-square"
+            >
+              <Play />
+            </Button>
+            <Button
+              size="icon"
+              variant="secondary"
+              onClick={handlePlayInDiscord}
+              disabled={isPlayingDiscord}
+              className="cursor-pointer bg-gray-300 hover:bg-gray-400 text-white aspect-square"
+            >
+              <img src={DiscordIcon} alt="Discord" className="h-6 w-6" />
+            </Button>
           </div>
         </CardContent>
-        <CardFooter className="flex gap-2 pt-3">
+        <CardFooter className="flex flex-col gap-0 pt-3 pb-3 px-4">
           <Button
+            variant="ghost"
             size="sm"
-            onClick={() => onPlay(sound)}
-            className="flex-1 cursor-pointer bg-green-500 hover:bg-green-600 text-white"
+            onClick={() => setIsDetailsExpanded(!isDetailsExpanded)}
+            className="w-full flex items-center justify-center gap-1 h-6 text-xs text-muted-foreground hover:text-foreground"
           >
-            <Play />
-            Browser
+            {isDetailsExpanded ? (
+              <ChevronUp className="h-3 w-3" />
+            ) : (
+              <ChevronDown className="h-3 w-3" />
+            )}
           </Button>
-          <Button
-            size="sm"
-            variant="secondary"
-            onClick={handlePlayInDiscord}
-            disabled={isPlayingDiscord}
-            className="flex-1 cursor-pointer bg-blue-500 hover:bg-blue-600 text-white"
-          >
-            <Music />
-            Discord
-          </Button>
-          <Button
-            size="sm"
-            variant="destructive"
-            onClick={() => setShowDeleteDialog(true)}
-            className="cursor-pointer"
-          >
-            <Trash2 />
-          </Button>
+          {isDetailsExpanded && (
+            <div className="w-full pt-2">
+              <div className="flex gap-2 justify-center items-center">
+                <Badge variant="secondary" className="text-xs whitespace-nowrap">
+                  {formatSize(sound.size)}
+                </Badge>
+                <Badge variant="outline" className="text-xs whitespace-nowrap">
+                  {formatDate(sound.uploadedAt)}
+                </Badge>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  onClick={() => setShowDeleteDialog(true)}
+                  className="cursor-pointer hover:bg-red-900/20 h-5 w-5 p-0 text-red-500 hover:text-red-600"
+                >
+                  <Trash2 className="h-2.5 w-2.5" />
+                </Button>
+              </div>
+            </div>
+          )}
         </CardFooter>
       </Card>
 
