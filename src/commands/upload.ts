@@ -1,6 +1,11 @@
 import { SlashCommandBuilder } from 'discord.js';
 import type { Command } from '../types/index.js';
-import { saveSoundFile, validateFileName } from '../services/storage.js';
+import {
+  saveSoundFile,
+  validateFileName,
+  writeMetadata,
+  addTagsToGlobal,
+} from '../services/storage.js';
 import { extname } from 'path';
 import { logger } from '../logger.js';
 
@@ -45,6 +50,16 @@ export const upload: Command = {
       await saveSoundFile(fileName, buffer);
 
       const nameWithoutExt = validateFileName(fileName.replace(ext, ''));
+
+      // Create metadata file
+      await writeMetadata(nameWithoutExt, {
+        displayName: nameWithoutExt,
+        filename: nameWithoutExt + ext,
+        tags: [],
+      });
+
+      // Ensure tags.json exists with empty array
+      await addTagsToGlobal([]);
 
       await interaction.editReply(
         `✅ Successfully uploaded **${nameWithoutExt}**!\nUse \`/play ${nameWithoutExt}\` to play it.`

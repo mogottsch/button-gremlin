@@ -3,6 +3,8 @@ import type { Sound } from '@backend/web/schemas/index.js';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
+import { Input } from './ui/input';
+import { Label } from './ui/label';
 import {
   Dialog,
   DialogContent,
@@ -11,7 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from './ui/dialog';
-import { Play, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
+import { Play, Trash2, ChevronDown, ChevronUp, Plus, X } from 'lucide-react';
 import { api } from '../services/api';
 import { toast } from 'sonner';
 import DiscordIcon from '../assets/discordIcon.svg';
@@ -24,8 +26,12 @@ interface SoundCardProps {
 
 export function SoundCard({ sound, onPlay, onDelete }: SoundCardProps) {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showTagsDialog, setShowTagsDialog] = useState(false);
   const [isPlayingDiscord, setIsPlayingDiscord] = useState(false);
   const [isDetailsExpanded, setIsDetailsExpanded] = useState(false);
+  const [editedTags, setEditedTags] = useState<string[]>([]);
+  const [newTagInput, setNewTagInput] = useState('');
+  const [isDragOver, setIsDragOver] = useState(false);
 
   const formatSize = (bytes: number) => {
     if (bytes < 1024) return `${bytes} B`;
@@ -61,9 +67,84 @@ export function SoundCard({ sound, onPlay, onDelete }: SoundCardProps) {
     }
   };
 
+  const handleOpenTagsDialog = () => {
+    setEditedTags([...(sound.tags || [])]);
+    setNewTagInput('');
+    setShowTagsDialog(true);
+  };
+
+  const handleAddTag = () => {
+    const trimmedTag = newTagInput.trim().toLowerCase();
+    if (trimmedTag && !editedTags.includes(trimmedTag)) {
+      setEditedTags([...editedTags, trimmedTag]);
+      setNewTagInput('');
+    }
+  };
+
+  const handleRemoveTag = (tagToRemove: string) => {
+    setEditedTags(editedTags.filter((tag) => tag !== tagToRemove));
+  };
+
+  const handleRemoveTagDirect = async (tagToRemove: string) => {
+    try {
+      const newTags = sound.tags?.filter((tag) => tag !== tagToRemove) || [];
+      await api.sounds.updateMetadata(sound.name, { tags: newTags });
+      toast.success(`Tag "${tagToRemove}" removed`);
+      onDelete(); // Refresh the list
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to remove tag');
+    }
+  };
+
+  const handleSaveTags = async () => {
+    try {
+      await api.sounds.updateMetadata(sound.name, { tags: editedTags });
+      toast.success('Tags updated');
+      setShowTagsDialog(false);
+      onDelete(); // Refresh the list
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to update tags');
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+
+    const tag = e.dataTransfer.getData('tag');
+    if (tag && !sound.tags?.includes(tag)) {
+      try {
+        const newTags = [...(sound.tags || []), tag];
+        await api.sounds.updateMetadata(sound.name, { tags: newTags });
+        toast.success(`Tag "${tag}" added`);
+        onDelete(); // Refresh the list
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : 'Failed to add tag');
+      }
+    }
+  };
+
   return (
     <>
-      <Card className="group transition-all hover:border-primary/50 hover:shadow-lg hover:shadow-primary/10 h-fit relative max-w-[240px]">
+      <Card
+        className={`group transition-all hover:border-primary/50 hover:shadow-lg hover:shadow-primary/10 h-fit relative max-w-[240px] ${
+          isDragOver ? 'border-primary border-2 bg-primary/5' : ''
+        }`}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
         <CardHeader className="pb-3 px-4 pt-4">
           <CardTitle className="flex items-center gap-2 text-base justify-center h-12">
             <span className="text-center leading-tight line-clamp-2" title={sound.displayName}>
@@ -105,7 +186,34 @@ export function SoundCard({ sound, onPlay, onDelete }: SoundCardProps) {
             )}
           </Button>
           {isDetailsExpanded && (
-            <div className="w-full pt-2">
+            <div className="w-full pt-2 space-y-2">
+              <div className="flex flex-wrap gap-1 justify-center items-center">
+                {sound.tags && sound.tags.length > 0 ? (
+                  sound.tags.map((tag) => (
+                    <Badge
+                      key={tag}
+                      variant="default"
+                      className="text-xs cursor-pointer hover:bg-destructive/80 transition-colors"
+                      onClick={() => handleRemoveTagDirect(tag)}
+                      title="Click to remove"
+                    >
+                      {tag}
+                      <X className="h-3 w-3 ml-1" />
+                    </Badge>
+                  ))
+                ) : (
+                  <span className="text-xs text-muted-foreground">Drag tags here to add them</span>
+                )}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={handleOpenTagsDialog}
+                  className="h-5 w-5 p-0 hover:bg-primary/10"
+                  title="Add custom tag"
+                >
+                  <Plus className="h-3 w-3" />
+                </Button>
+              </div>
               <div className="flex gap-2 justify-center items-center">
                 <Badge variant="secondary" className="text-xs whitespace-nowrap">
                   {formatSize(sound.size)}
@@ -142,6 +250,61 @@ export function SoundCard({ sound, onPlay, onDelete }: SoundCardProps) {
             <Button variant="destructive" onClick={handleDelete}>
               Delete
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showTagsDialog} onOpenChange={setShowTagsDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Tags</DialogTitle>
+            <DialogDescription>Add or remove tags for "{sound.displayName}"</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="tag-input">Add new tag</Label>
+              <div className="flex gap-2 mt-2">
+                <Input
+                  id="tag-input"
+                  placeholder="Enter tag name..."
+                  value={newTagInput}
+                  onChange={(e) => setNewTagInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleAddTag();
+                    }
+                  }}
+                />
+                <Button onClick={handleAddTag}>Add</Button>
+              </div>
+            </div>
+            <div>
+              <Label>Current tags</Label>
+              <div className="flex flex-wrap gap-2 mt-2 min-h-[40px] p-2 border rounded-md">
+                {editedTags.length > 0 ? (
+                  editedTags.map((tag) => (
+                    <Badge key={tag} variant="default" className="text-xs">
+                      {tag}
+                      <button
+                        onClick={() => handleRemoveTag(tag)}
+                        className="ml-1 hover:text-destructive"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  ))
+                ) : (
+                  <span className="text-xs text-muted-foreground">No tags yet</span>
+                )}
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowTagsDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSaveTags}>Save</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

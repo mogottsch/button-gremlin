@@ -2,9 +2,10 @@ import { createReadStream } from 'fs';
 import { unlink } from 'fs/promises';
 import { listSoundFiles, getSoundFile } from '../../services/storage.js';
 import type { SoundFile } from '../../services/storage.js';
+import { join } from 'path';
 
 export async function getAllSounds(): Promise<
-  Array<{ name: string; displayName: string; size: number; uploadedAt: string }>
+  Array<{ name: string; displayName: string; size: number; uploadedAt: string; tags: string[] }>
 > {
   const sounds = await listSoundFiles();
   return sounds.map((sound) => ({
@@ -12,6 +13,7 @@ export async function getAllSounds(): Promise<
     displayName: sound.displayName,
     size: sound.size,
     uploadedAt: sound.uploadedAt.toISOString(),
+    tags: sound.tags,
   }));
 }
 
@@ -33,4 +35,12 @@ export async function deleteSound(name: string): Promise<void> {
     throw new Error('Sound not found');
   }
   await unlink(sound.path);
+
+  // Also delete metadata file if it exists
+  const metaPath = join('metadata', `${name}.meta.json`);
+  try {
+    await unlink(metaPath);
+  } catch {
+    // Metadata file doesn't exist, ignore
+  }
 }

@@ -7,3 +7,8 @@ dist/
 
 sounds/*
 !sounds/.gitkeep
+
+metadata/*
+!metadata/.gitkeep
+
+tags.json

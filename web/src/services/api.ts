@@ -60,6 +60,66 @@ export const api = {
         throw new Error('Failed to delete sound');
       }
     },
+    getTags: async (): Promise<string[]> => {
+      const response = await fetch(`${API_BASE_URL}/sounds/tags`, {
+        headers: getAuthHeaders(),
+      });
+      if (!response.ok) {
+        if (response.status === 401) {
+          throw new Error('Unauthorized');
+        }
+        throw new Error('Failed to fetch tags');
+      }
+      return response.json();
+    },
+    createTag: async (tag: string): Promise<void> => {
+      const response = await fetch(`${API_BASE_URL}/sounds/tags`, {
+        method: 'POST',
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tag }),
+      });
+      if (!response.ok) {
+        if (response.status === 401) {
+          throw new Error('Unauthorized');
+        }
+        if (response.status === 400) {
+          const data = await response.json();
+          throw new Error(data.error || 'Failed to create tag');
+        }
+        throw new Error('Failed to create tag');
+      }
+    },
+    deleteTag: async (tag: string): Promise<void> => {
+      const response = await fetch(`${API_BASE_URL}/sounds/tags/${encodeURIComponent(tag)}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+      });
+      if (!response.ok) {
+        if (response.status === 401) {
+          throw new Error('Unauthorized');
+        }
+        if (response.status === 404) {
+          throw new Error('Tag not found');
+        }
+        throw new Error('Failed to delete tag');
+      }
+    },
+    updateMetadata: async (
+      name: string,
+      metadata: { displayName?: string; tags?: string[] }
+    ): Promise<void> => {
+      const response = await fetch(`${API_BASE_URL}/sounds/${name}/metadata`, {
+        method: 'PATCH',
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify(metadata),
+      });
+      if (!response.ok) {
+        if (response.status === 401) {
+          throw new Error('Unauthorized');
+        }
+        throw new Error('Failed to update metadata');
+      }
+    },
   },
   bot: {
     status: async (): Promise<BotStatus> => {
