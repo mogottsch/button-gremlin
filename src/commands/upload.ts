@@ -1,11 +1,7 @@
 import { SlashCommandBuilder } from 'discord.js';
 import type { Command } from '../types/index.js';
-import {
-  saveSoundFile,
-  validateFileName,
-  writeMetadata,
-  addTagsToGlobal,
-} from '../services/storage.js';
+import { saveSoundFile, writeMetadata, addTagsToGlobal } from '../services/storage.js';
+import { normalizeFileName, validateFileName } from '../utils/filename.js';
 import { extname } from 'path';
 import { logger } from '../logger.js';
 
@@ -49,11 +45,16 @@ export const upload: Command = {
       const fileName = attachment.name;
       await saveSoundFile(fileName, buffer);
 
-      const nameWithoutExt = validateFileName(fileName.replace(ext, ''));
+      const ext = extname(fileName).toLowerCase();
+      const originalNameWithoutExt = fileName.replace(ext, '');
 
-      // Create metadata file
+      // Normalize the filename to create the internal name and initial display name
+      const normalizedName = normalizeFileName(originalNameWithoutExt);
+      const nameWithoutExt = validateFileName(normalizedName);
+
+      // Create metadata file with normalized display name
       await writeMetadata(nameWithoutExt, {
-        displayName: nameWithoutExt,
+        displayName: normalizedName,
         filename: nameWithoutExt + ext,
         tags: [],
       });
@@ -62,7 +63,7 @@ export const upload: Command = {
       await addTagsToGlobal([]);
 
       await interaction.editReply(
-        `✅ Successfully uploaded **${nameWithoutExt}**!\nUse \`/play ${nameWithoutExt}\` to play it.`
+        `✅ Successfully uploaded **${normalizedName}**!\nUse \`/play ${nameWithoutExt}\` to play it.`
       );
       logger.info({ fileName: nameWithoutExt }, 'Sound file uploaded successfully');
     } catch (error) {

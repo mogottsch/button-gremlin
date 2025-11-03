@@ -32,6 +32,8 @@ export function SoundCard({ sound, onPlay, onDelete }: SoundCardProps) {
   const [editedTags, setEditedTags] = useState<string[]>([]);
   const [newTagInput, setNewTagInput] = useState('');
   const [isDragOver, setIsDragOver] = useState(false);
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editedDisplayName, setEditedDisplayName] = useState(sound.displayName);
 
   const formatSize = (bytes: number) => {
     if (bytes < 1024) return `${bytes} B`;
@@ -135,6 +137,46 @@ export function SoundCard({ sound, onPlay, onDelete }: SoundCardProps) {
     }
   };
 
+  const handleDoubleClickName = () => {
+    setIsEditingName(true);
+    setEditedDisplayName(sound.displayName);
+  };
+
+  const handleSaveDisplayName = async () => {
+    const trimmedName = editedDisplayName.trim();
+    if (!trimmedName) {
+      toast.error('Display name cannot be empty');
+      return;
+    }
+
+    if (trimmedName === sound.displayName) {
+      setIsEditingName(false);
+      return;
+    }
+
+    try {
+      await api.sounds.updateMetadata(sound.name, { displayName: trimmedName });
+      toast.success('Display name updated');
+      setIsEditingName(false);
+      onDelete(); // Refresh the list
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to update display name');
+    }
+  };
+
+  const handleCancelEditName = () => {
+    setIsEditingName(false);
+    setEditedDisplayName(sound.displayName);
+  };
+
+  const handleKeyDownName = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      handleSaveDisplayName();
+    } else if (e.key === 'Escape') {
+      handleCancelEditName();
+    }
+  };
+
   return (
     <>
       <Card
@@ -147,9 +189,24 @@ export function SoundCard({ sound, onPlay, onDelete }: SoundCardProps) {
       >
         <CardHeader className="pb-3 px-4 pt-4">
           <CardTitle className="flex items-center gap-2 text-base justify-center h-12">
-            <span className="text-center leading-tight line-clamp-2" title={sound.displayName}>
-              {sound.displayName}
-            </span>
+            {isEditingName ? (
+              <Input
+                value={editedDisplayName}
+                onChange={(e) => setEditedDisplayName(e.target.value)}
+                onBlur={handleSaveDisplayName}
+                onKeyDown={handleKeyDownName}
+                className="text-center h-8 text-base"
+                autoFocus
+              />
+            ) : (
+              <span
+                className="text-center leading-tight line-clamp-2 cursor-pointer hover:text-primary/80 transition-colors"
+                title={`${sound.displayName} (double-click to edit)`}
+                onDoubleClick={handleDoubleClickName}
+              >
+                {sound.displayName}
+              </span>
+            )}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3 pb-0 px-4">
@@ -202,7 +259,7 @@ export function SoundCard({ sound, onPlay, onDelete }: SoundCardProps) {
                     </Badge>
                   ))
                 ) : (
-                  <span className="text-xs text-muted-foreground">Drag tags here to add them</span>
+                  <span className="text-xs text-muted-foreground">no tags</span>
                 )}
                 <Button
                   size="sm"

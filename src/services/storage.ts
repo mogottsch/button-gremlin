@@ -2,6 +2,7 @@ import { readdir, stat, mkdir } from 'fs/promises';
 import { join, extname, basename } from 'path';
 import { logger } from '../logger.js';
 import { readFile, writeFile } from 'fs/promises';
+import { validateFileName } from '../utils/filename.js';
 
 const SOUNDS_DIR = 'sounds';
 const METADATA_DIR = 'metadata';
@@ -128,13 +129,6 @@ export async function listSoundFiles(): Promise<SoundFile[]> {
 export async function getSoundFile(name: string): Promise<SoundFile | null> {
   const files = await listSoundFiles();
   return files.find((file) => file.name.toLowerCase() === name.toLowerCase()) ?? null;
-}
-
-export function validateFileName(fileName: string): string {
-  return fileName
-    .replace(/[^a-zA-Z0-9_-]/g, '_')
-    .replace(/_{2,}/g, '_')
-    .toLowerCase();
 }
 
 export async function saveSoundFile(fileName: string, data: Buffer): Promise<string> {

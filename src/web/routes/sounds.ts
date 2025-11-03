@@ -9,6 +9,7 @@ import {
   getSoundFile,
   removeTagFromAll,
 } from '../../services/storage.js';
+import { normalizeFileName, validateFileName } from '../../utils/filename.js';
 
 const ALLOWED_TYPES = [
   'audio/mpeg',
@@ -111,10 +112,10 @@ export function createSoundsRoutes(): FastifyPluginAsync {
             return reply.status(400).send({ success: false, error: 'No file uploaded' });
           }
 
-          const ext = data.filename.toLowerCase().match(/\.[^.]+$/)?.[0];
+          const extCheck = data.filename.toLowerCase().match(/\.[^.]+$/)?.[0];
           if (
             !ALLOWED_TYPES.includes(data.mimetype) &&
-            !(ext && ALLOWED_EXTENSIONS.includes(ext))
+            !(extCheck && ALLOWED_EXTENSIONS.includes(extCheck))
           ) {
             return reply.status(400).send({
               success: false,
@@ -126,15 +127,21 @@ export function createSoundsRoutes(): FastifyPluginAsync {
           const filename = data.filename;
 
           const { writeFile } = await import('fs/promises');
-          const filePath = `sounds/${filename}`;
+          const ext = filename.match(/\.[^.]+$/)?.[0] ?? '';
+          const originalNameWithoutExt = filename.replace(ext, '');
+
+          // Normalize the filename to create the internal name and initial display name
+          const normalizedName = normalizeFileName(originalNameWithoutExt);
+          const nameWithoutExt = validateFileName(normalizedName);
+          const sanitizedFilename = nameWithoutExt + ext;
+
+          const filePath = `sounds/${sanitizedFilename}`;
           await writeFile(filePath, buffer);
 
-          const nameWithoutExt = filename.replace(/\.[^.]+$/, '');
-
-          // Create metadata file
+          // Create metadata file with normalized display name
           await writeMetadata(nameWithoutExt, {
-            displayName: nameWithoutExt,
-            filename: filename,
+            displayName: normalizedName,
+            filename: sanitizedFilename,
             tags: [],
           });
 

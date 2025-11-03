@@ -4,7 +4,7 @@ import { Card, CardContent } from './ui/card';
 import { Button } from './ui/button';
 import { Progress } from './ui/progress';
 import { Slider } from './ui/slider';
-import { Play, Pause, Volume2, VolumeX } from 'lucide-react';
+import { Play, Pause, Volume2, VolumeX, Square } from 'lucide-react';
 import { api } from '../services/api';
 
 interface SoundPlayerProps {
@@ -103,6 +103,14 @@ export function SoundPlayer({ currentSound }: SoundPlayerProps) {
     }
   };
 
+  const stopAudio = () => {
+    if (!audioRef.current) return;
+    audioRef.current.pause();
+    audioRef.current.currentTime = 0;
+    setIsPlaying(false);
+    setProgress(0);
+  };
+
   const toggleMute = () => {
     if (!audioRef.current) return;
     setIsMuted(!isMuted);
@@ -129,15 +137,26 @@ export function SoundPlayer({ currentSound }: SoundPlayerProps) {
         <audio ref={audioRef} />
         <div className="mx-auto w-full max-w-6xl space-y-3">
           <div className="flex items-center gap-4">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={togglePlayPause}
-              disabled={!currentSound}
-              className="h-10 w-10 rounded-full p-0"
-            >
-              {isPlaying ? <Pause /> : <Play />}
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={togglePlayPause}
+                disabled={!currentSound}
+                className="h-10 w-10 rounded-full p-0"
+              >
+                {isPlaying ? <Pause /> : <Play />}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={stopAudio}
+                disabled={!currentSound}
+                className="h-10 w-10 rounded-full p-0"
+              >
+                <Square />
+              </Button>
+            </div>
             <div className="flex-1 space-y-1.5">
               <p className="text-sm font-medium">{currentSound.displayName}</p>
               <Progress value={progress} className="h-1.5" />
