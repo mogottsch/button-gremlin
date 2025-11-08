@@ -18,6 +18,9 @@ export interface Config {
     pretty: boolean;
     destination?: string;
   };
+  voice: {
+    idleDisconnectTimeoutMs?: number;
+  };
 }
 
 export interface Command {

@@ -12,9 +12,47 @@ import {
 } from '@discordjs/voice';
 import { VoiceBasedChannel } from 'discord.js';
 import { createReadStream } from 'fs';
+import { getConfig } from '../config.js';
 
 const connections = new Map<string, VoiceConnection>();
 const players = new Map<string, AudioPlayer>();
+const idleTimers = new Map<string, NodeJS.Timeout>();
+let idleTimeoutLoaded = false;
+let cachedIdleDisconnectTimeoutMs: number | undefined;
+
+function getIdleDisconnectTimeoutMs(): number | undefined {
+  if (!idleTimeoutLoaded) {
+    cachedIdleDisconnectTimeoutMs = getConfig().voice.idleDisconnectTimeoutMs;
+    idleTimeoutLoaded = true;
+  }
+
+  return cachedIdleDisconnectTimeoutMs;
+}
+
+function clearIdleDisconnect(guildId: string): void {
+  const existing = idleTimers.get(guildId);
+
+  if (existing) {
+    clearTimeout(existing);
+    idleTimers.delete(guildId);
+  }
+}
+
+function scheduleIdleDisconnect(guildId: string): void {
+  const timeoutMs = getIdleDisconnectTimeoutMs();
+
+  if (!timeoutMs) {
+    return;
+  }
+
+  clearIdleDisconnect(guildId);
+
+  const timeout = setTimeout(() => {
+    disconnectFromVoiceChannel(guildId);
+  }, timeoutMs);
+
+  idleTimers.set(guildId, timeout);
+}
 
 export function getConnection(guildId: string): VoiceConnection | undefined {
   return connections.get(guildId);
@@ -28,6 +66,8 @@ export async function connectToVoiceChannel(channel: VoiceBasedChannel): Promise
   const guildId = channel.guild.id;
 
   let connection = connections.get(guildId);
+
+  clearIdleDisconnect(guildId);
 
   if (connection) {
     const status = connection.state.status;
@@ -65,6 +105,7 @@ export async function connectToVoiceChannel(channel: VoiceBasedChannel): Promise
   try {
     await entersState(connection, VoiceConnectionStatus.Ready, 30_000);
     connections.set(guildId, connection);
+    clearIdleDisconnect(guildId);
 
     connection.on(VoiceConnectionStatus.Disconnected, () => {
       void (async (): Promise<void> => {
@@ -77,6 +118,7 @@ export async function connectToVoiceChannel(channel: VoiceBasedChannel): Promise
           connection.destroy();
           connections.delete(guildId);
           players.delete(guildId);
+          clearIdleDisconnect(guildId);
         }
       })();
     });
@@ -85,11 +127,13 @@ export async function connectToVoiceChannel(channel: VoiceBasedChannel): Promise
   } catch (error) {
     connection.destroy();
     connections.delete(guildId);
+    clearIdleDisconnect(guildId);
     throw error;
   }
 }
 
 export function disconnectFromVoiceChannel(guildId: string): void {
+  clearIdleDisconnect(guildId);
   const connection = connections.get(guildId);
 
   if (connection) {
@@ -125,6 +169,7 @@ export async function playAudioFile(
   filePath: string
 ): Promise<void> {
   const player = getOrCreateAudioPlayer(guildId);
+  clearIdleDisconnect(guildId);
   const resource = createAudioResourceFromFile(filePath);
 
   connection.subscribe(player);
@@ -133,6 +178,7 @@ export async function playAudioFile(
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => {
       cleanup();
+      scheduleIdleDisconnect(guildId);
       reject(new Error('Audio playback timeout'));
     }, 600_000);
 
@@ -144,11 +190,13 @@ export async function playAudioFile(
 
     const onError = (error: Error): void => {
       cleanup();
+      scheduleIdleDisconnect(guildId);
       reject(error);
     };
 
     const onIdle = (): void => {
       cleanup();
+      scheduleIdleDisconnect(guildId);
       resolve();
     };
 
