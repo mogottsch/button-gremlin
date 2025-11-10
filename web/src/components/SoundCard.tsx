@@ -16,7 +16,7 @@ import {
 import { Play, Trash2, ChevronDown, ChevronUp, Plus, X } from 'lucide-react';
 import { api } from '../services/api';
 import { toast } from 'sonner';
-import DiscordIcon from '../assets/discordIcon.svg';
+import DiscordIcon from '/discordIcon.svg';
 
 interface SoundCardProps {
   sound: Sound;
