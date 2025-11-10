@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { normalizeFileName, validateFileName } from './src/utils/filename.js';
+import { normalizeFileName, validateFileName } from './utils/filename.js';
 
 interface Metadata {
   displayName: string;
