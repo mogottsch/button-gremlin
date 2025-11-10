@@ -13,10 +13,11 @@ import {
 import { VoiceBasedChannel } from 'discord.js';
 import { createReadStream } from 'fs';
 import { getConfig } from '../config.js';
+import logger from '../logger.js';
 
 const connections = new Map<string, VoiceConnection>();
 const players = new Map<string, AudioPlayer>();
-const idleTimers = new Map<string, NodeJS.Timeout>();
+const idleTimers = new Map<string, ReturnType<typeof setTimeout>>();
 let idleTimeoutLoaded = false;
 let cachedIdleDisconnectTimeoutMs: number | undefined;
 
@@ -62,41 +63,73 @@ export function getAllConnections(): Map<string, VoiceConnection> {
   return connections;
 }
 
-export async function connectToVoiceChannel(channel: VoiceBasedChannel): Promise<VoiceConnection> {
+function scheduleIdleDisconnectIfIdle(guildId: string): void {
+  const player = players.get(guildId);
+  if (!player || player.state.status === AudioPlayerStatus.Idle) {
+    scheduleIdleDisconnect(guildId);
+  }
+}
+
+async function handleDisconnected(connection: VoiceConnection, guildId: string): Promise<void> {
+  try {
+    await Promise.race([
+      entersState(connection, VoiceConnectionStatus.Signalling, 5_000),
+      entersState(connection, VoiceConnectionStatus.Connecting, 5_000),
+    ]);
+  } catch {
+    connection.destroy();
+    connections.delete(guildId);
+    players.delete(guildId);
+    clearIdleDisconnect(guildId);
+  }
+}
+
+function attachDisconnectHandler(connection: VoiceConnection, guildId: string): void {
+  connection.on(VoiceConnectionStatus.Disconnected, () => {
+    void handleDisconnected(connection, guildId);
+  });
+}
+
+async function reuseExistingConnection(
+  channel: VoiceBasedChannel,
+  connection: VoiceConnection
+): Promise<VoiceConnection | null> {
   const guildId = channel.guild.id;
+  const status = connection.state.status;
 
-  let connection = connections.get(guildId);
+  if (status === VoiceConnectionStatus.Ready || status === VoiceConnectionStatus.Connecting) {
+    if (connection.joinConfig.channelId !== channel.id) {
+      connection.rejoin({
+        channelId: channel.id,
+        selfDeaf: true,
+        selfMute: false,
+      });
+    }
 
-  clearIdleDisconnect(guildId);
-
-  if (connection) {
-    const status = connection.state.status;
-
-    if (status === VoiceConnectionStatus.Ready || status === VoiceConnectionStatus.Connecting) {
-      if (connection.joinConfig.channelId !== channel.id) {
-        connection.rejoin({
-          channelId: channel.id,
-          selfDeaf: true,
-          selfMute: false,
-        });
-      }
-
-      if (status === VoiceConnectionStatus.Ready) {
-        return connection;
-      }
-
-      await entersState(connection, VoiceConnectionStatus.Ready, 10_000);
+    if (status === VoiceConnectionStatus.Ready) {
+      scheduleIdleDisconnectIfIdle(guildId);
       return connection;
     }
 
-    if (status !== VoiceConnectionStatus.Destroyed) {
-      connection.destroy();
-    }
+    await entersState(connection, VoiceConnectionStatus.Ready, 10_000);
+    scheduleIdleDisconnectIfIdle(guildId);
+    return connection;
   }
 
-  connection = joinVoiceChannel({
+  if (status !== VoiceConnectionStatus.Destroyed) {
+    connection.destroy();
+  }
+
+  connections.delete(guildId);
+  return null;
+}
+
+async function createConnection(channel: VoiceBasedChannel): Promise<VoiceConnection> {
+  logger.info(`Connecting to voice channel ${channel.id} in guild ${channel.guild.id}`);
+  const guildId = channel.guild.id;
+  const connection = joinVoiceChannel({
     channelId: channel.id,
-    guildId: channel.guild.id,
+    guildId,
     adapterCreator: channel.guild.voiceAdapterCreator,
     selfDeaf: true,
     selfMute: false,
@@ -106,23 +139,8 @@ export async function connectToVoiceChannel(channel: VoiceBasedChannel): Promise
     await entersState(connection, VoiceConnectionStatus.Ready, 30_000);
     connections.set(guildId, connection);
     clearIdleDisconnect(guildId);
-
-    connection.on(VoiceConnectionStatus.Disconnected, () => {
-      void (async (): Promise<void> => {
-        try {
-          await Promise.race([
-            entersState(connection, VoiceConnectionStatus.Signalling, 5_000),
-            entersState(connection, VoiceConnectionStatus.Connecting, 5_000),
-          ]);
-        } catch {
-          connection.destroy();
-          connections.delete(guildId);
-          players.delete(guildId);
-          clearIdleDisconnect(guildId);
-        }
-      })();
-    });
-
+    scheduleIdleDisconnectIfIdle(guildId);
+    attachDisconnectHandler(connection, guildId);
     return connection;
   } catch (error) {
     connection.destroy();
@@ -130,6 +148,20 @@ export async function connectToVoiceChannel(channel: VoiceBasedChannel): Promise
     clearIdleDisconnect(guildId);
     throw error;
   }
+}
+
+export async function connectToVoiceChannel(channel: VoiceBasedChannel): Promise<VoiceConnection> {
+  const guildId = channel.guild.id;
+  clearIdleDisconnect(guildId);
+  const existing = connections.get(guildId);
+  if (existing) {
+    const reused = await reuseExistingConnection(channel, existing);
+    if (reused) {
+      return reused;
+    }
+  }
+
+  return createConnection(channel);
 }
 
 export function disconnectFromVoiceChannel(guildId: string): void {
@@ -156,6 +188,15 @@ export function getOrCreateAudioPlayer(guildId: string): AudioPlayer {
   }
 
   return player;
+}
+
+export async function playSoundInChannel(
+  channel: VoiceBasedChannel,
+  filePath: string
+): Promise<void> {
+  const connection = await connectToVoiceChannel(channel);
+  logger.info({ channelId: channel.id, guildId: channel.guild.id }, 'Connected to voice channel');
+  await playAudioFile(connection, channel.guild.id, filePath);
 }
 
 export function createAudioResourceFromFile(filePath: string): AudioResource {

@@ -35,20 +35,24 @@ export function getConfig(): Config {
     (process.env['LOG_PRETTY'] === undefined && process.env['NODE_ENV'] !== 'production');
   const logDestination = process.env['LOG_DESTINATION'];
   const voiceIdleTimeoutSeconds = process.env['VOICE_IDLE_TIMEOUT_SECONDS'];
-  let idleDisconnectTimeoutMs: number | undefined;
+  let idleDisconnectTimeoutMs: number | undefined = 10_000;
 
-  if (voiceIdleTimeoutSeconds !== undefined && voiceIdleTimeoutSeconds !== '') {
-    if (!/^\d+$/.test(voiceIdleTimeoutSeconds)) {
-      throw new Error('VOICE_IDLE_TIMEOUT_SECONDS must be a positive integer');
+  if (voiceIdleTimeoutSeconds !== undefined) {
+    if (voiceIdleTimeoutSeconds === '') {
+      idleDisconnectTimeoutMs = undefined;
+    } else {
+      if (!/^\d+$/.test(voiceIdleTimeoutSeconds)) {
+        throw new Error('VOICE_IDLE_TIMEOUT_SECONDS must be a positive integer');
+      }
+
+      const parsed = Number.parseInt(voiceIdleTimeoutSeconds, 10);
+
+      if (!Number.isFinite(parsed) || parsed <= 0) {
+        throw new Error('VOICE_IDLE_TIMEOUT_SECONDS must be a positive integer');
+      }
+
+      idleDisconnectTimeoutMs = parsed * 1_000;
     }
-
-    const parsed = Number.parseInt(voiceIdleTimeoutSeconds, 10);
-
-    if (!Number.isFinite(parsed) || parsed <= 0) {
-      throw new Error('VOICE_IDLE_TIMEOUT_SECONDS must be a positive integer');
-    }
-
-    idleDisconnectTimeoutMs = parsed * 1_000;
   }
 
   return {
