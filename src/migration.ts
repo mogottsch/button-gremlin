@@ -29,9 +29,12 @@ function createFilename(soundNameWithoutExt: string): string {
   return `${validatedFilename}.mp3`;
 }
 
-function createDisplayName(soundNameWithoutExt: string): string {
-  let normalizedName = normalizeFileName(soundNameWithoutExt);
+function createDisplayName(metadata: Metadata): string {
+  let normalizedName = normalizeFileName(
+    metadata.displayName.length > 0 ? metadata.displayName : metadata.filename
+  );
   normalizedName = normalizedName.replaceAll('_', ' ');
+  normalizedName = normalizedName.replaceAll('mp3', '');
   return normalizedName;
 }
 
@@ -44,11 +47,10 @@ export function migrate(): void {
 
   for (const soundFile of soundFiles) {
     const soundNameWithoutExt = path.parse(soundFile).name;
-    const metadataPath = path.join(METADATA_DIR, `${soundNameWithoutExt}.meta.json`);
+    const metadataPath = path.join(METADATA_DIR, `${soundNameWithoutExt}_meta.json`);
     const metadata = loadOrCreateMetadata(metadataPath);
-
     metadata.filename = createFilename(soundNameWithoutExt);
-    metadata.displayName = createDisplayName(soundNameWithoutExt);
+    metadata.displayName = createDisplayName(metadata);
     metadata.tags = ensureTags(metadata);
 
     fs.writeFileSync(metadataPath, JSON.stringify(metadata, null, 2) + '\n', 'utf-8');
