@@ -36,11 +36,13 @@ export async function deleteSound(name: string): Promise<void> {
   }
   await unlink(sound.path);
 
-  // Also delete metadata file if it exists
-  const metaPath = join('metadata', `${name}.meta.json`);
-  try {
-    await unlink(metaPath);
-  } catch {
-    // Metadata file doesn't exist, ignore
-  }
+  const metaPath = join('sounds', 'metadata', `${name}_meta.json`);
+  await unlink(metaPath).catch((error: unknown) => {
+    if (typeof error === 'object' && error && 'code' in error) {
+      if ((error as { code?: string }).code === 'ENOENT') {
+        return;
+      }
+    }
+    throw error;
+  });
 }

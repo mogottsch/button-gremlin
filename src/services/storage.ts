@@ -5,8 +5,8 @@ import { readFile, writeFile } from 'fs/promises';
 import { validateFileName } from '../utils/filename.js';
 
 const SOUNDS_DIR = 'sounds';
-const METADATA_DIR = 'metadata';
 const ALLOWED_EXTENSIONS = ['.mp3', '.wav', '.ogg', '.m4a', '.flac', '.webm', '.opus'];
+const METADATA_DIR = join(SOUNDS_DIR, 'metadata');
 const TAGS_FILE = 'tags.json';
 
 export interface SoundMetadata {
@@ -25,16 +25,13 @@ export interface SoundFile {
 }
 
 async function ensureMetadataDir(): Promise<void> {
-  try {
-    await mkdir(METADATA_DIR, { recursive: true });
-  } catch {
-    // Directory already exists
-  }
+  await mkdir(METADATA_DIR, { recursive: true });
 }
 
 async function readMetadata(name: string): Promise<SoundMetadata | null> {
+  const metaPath = join(METADATA_DIR, `${name}_meta.json`);
+
   try {
-    const metaPath = join(METADATA_DIR, `${name}.meta.json`);
     const content = await readFile(metaPath, 'utf-8');
     return JSON.parse(content) as SoundMetadata;
   } catch {
@@ -44,7 +41,7 @@ async function readMetadata(name: string): Promise<SoundMetadata | null> {
 
 export async function writeMetadata(name: string, metadata: SoundMetadata): Promise<void> {
   await ensureMetadataDir();
-  const metaPath = join(METADATA_DIR, `${name}.meta.json`);
+  const metaPath = join(METADATA_DIR, `${name}_meta.json`);
   await writeFile(metaPath, JSON.stringify(metadata, null, 2), 'utf-8');
 }
 

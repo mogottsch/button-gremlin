@@ -9,7 +9,7 @@ interface Metadata {
 }
 
 const SOUNDS_DIR = path.join(process.cwd(), 'sounds');
-const METADATA_DIR = path.join(process.cwd(), 'metadata');
+const METADATA_DIR = path.join(SOUNDS_DIR, 'metadata');
 
 function loadOrCreateMetadata(metadataPath: string): Metadata {
   if (fs.existsSync(metadataPath)) {
@@ -43,6 +43,7 @@ function ensureTags(metadata: Metadata): string[] {
 }
 
 export function migrate(): void {
+  fs.mkdirSync(METADATA_DIR, { recursive: true });
   const soundFiles = fs.readdirSync(SOUNDS_DIR).filter((file) => file.endsWith('.mp3'));
 
   for (const soundFile of soundFiles) {
