@@ -57,6 +57,3 @@ export function migrate(): void {
 
   console.log(`\nMigration complete! Processed ${soundFiles.length} sound files.`);
 }
-
-// Run migration if executed directly
-migrate();
