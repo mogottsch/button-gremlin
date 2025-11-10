@@ -1,7 +1,7 @@
 import { SlashCommandBuilder, GuildMember } from 'discord.js';
 import type { Command } from '../types/index.js';
 import { listSoundFiles, getSoundFile } from '../services/storage.js';
-import { connectToVoiceChannel, playAudioFile } from '../services/audio.js';
+import { playSoundInChannel } from '../services/audio.js';
 import { logger } from '../logger.js';
 
 export const play: Command = {
@@ -42,16 +42,8 @@ export const play: Command = {
     }
 
     try {
-      const connection = await connectToVoiceChannel(voiceChannel);
       await interaction.editReply(`🔊 Playing **${soundFile.displayName}**...`);
-
-      const guildId = interaction.guildId;
-      if (!guildId) {
-        await interaction.editReply('❌ This command can only be used in a server.');
-        return;
-      }
-
-      await playAudioFile(connection, guildId, soundFile.path);
+      await playSoundInChannel(voiceChannel, soundFile.path);
     } catch (error) {
       logger.error({ err: error, soundName, guildId: interaction.guildId }, 'Error playing sound');
       await interaction.editReply(

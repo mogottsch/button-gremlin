@@ -1,12 +1,106 @@
-import { Client } from 'discord.js';
-import { VoiceConnectionStatus } from '@discordjs/voice';
+import { Client, ClientUser, VoiceBasedChannel, Guild } from 'discord.js';
+import { VoiceConnectionStatus, VoiceConnection } from '@discordjs/voice';
 import {
   disconnectFromVoiceChannel,
   playAudioFile,
   getConnection,
-  connectToVoiceChannel,
+  playSoundInChannel,
 } from '../../services/audio.js';
 import { logger } from '../../logger.js';
+
+async function getGuildCandidates(guild: Guild, botUser: ClientUser): Promise<VoiceBasedChannel[]> {
+  await guild.channels.fetch();
+
+  const activeChannelIds = new Set<string>();
+  for (const [userId, voiceState] of guild.voiceStates.cache) {
+    if (voiceState.channel && userId !== botUser.id) {
+      activeChannelIds.add(voiceState.channel.id);
+    }
+  }
+
+  const candidates: VoiceBasedChannel[] = [];
+  for (const channel of guild.channels.cache.values()) {
+    if (channel.isVoiceBased() && activeChannelIds.has(channel.id)) {
+      logger.debug({ channelId: channel.id, channelName: channel.name }, 'Checking voice channel');
+      const hasPermissions = hasVoicePermissions(channel, botUser);
+      logger.debug({ channelId: channel.id, hasPermissions }, 'Permission check result');
+      if (hasPermissions) {
+        candidates.push(channel);
+      }
+    }
+  }
+
+  logger.debug(
+    {
+      guildId: guild.id,
+      channelCount: candidates.length,
+      channels: candidates.map((channel) => channel.id),
+    },
+    'Found channels with members'
+  );
+
+  return candidates;
+}
+
+function hasVoicePermissions(channel: VoiceBasedChannel, botUser: ClientUser): boolean {
+  const permissions = channel.permissionsFor(botUser);
+  return permissions?.has(['Connect', 'Speak']) ?? false;
+}
+
+async function findChannelInGuild(
+  guild: Guild,
+  botUser: ClientUser
+): Promise<VoiceBasedChannel | null> {
+  const candidates = await getGuildCandidates(guild, botUser);
+
+  for (const channel of candidates) {
+    logger.info(
+      { channelId: channel.id, channelName: channel.name, guildId: guild.id },
+      'Found target voice channel'
+    );
+    return channel;
+  }
+
+  logger.warn(`No suitable voice channels found in guild ${guild.id}`);
+  return null;
+}
+
+function findReadyConnection(
+  client: Client,
+  botUser: ClientUser
+): { connection: VoiceConnection; guildId: string } | null {
+  for (const guild of client.guilds.cache.values()) {
+    const voiceState = guild.members.cache.get(botUser.id)?.voice;
+    if (voiceState?.channel) {
+      const connection = getConnection(guild.id);
+      if (connection && connection.state.status === VoiceConnectionStatus.Ready) {
+        return { connection, guildId: guild.id };
+      }
+    }
+  }
+  return null;
+}
+
+async function findTargetVoiceChannel(
+  client: Client,
+  botUser: ClientUser
+): Promise<VoiceBasedChannel> {
+  logger.debug({ guildCount: client.guilds.cache.size }, 'Searching for non-empty voice channels');
+
+  for (const guild of client.guilds.cache.values()) {
+    try {
+      const channel = await findChannelInGuild(guild, botUser);
+      if (channel) {
+        return channel;
+      }
+    } catch (error) {
+      logger.warn({ err: error, guildId: guild.id }, 'Error searching for voice channels in guild');
+    }
+  }
+
+  logger.warn('No non-empty voice channels found to connect to');
+  throw new Error('No non-empty voice channels found to connect to');
+}
 
 export function getBotStatus(client: Client): {
   online: boolean;
@@ -35,126 +129,25 @@ export function getBotStatus(client: Client): {
 }
 
 export async function playSound(client: Client, soundPath: string): Promise<void> {
-  if (!client.user) {
+  const botUser = client.user;
+  if (!botUser) {
     throw new Error('Bot user not available');
   }
 
-  let guildId: string | null = null;
-  let connection = null;
+  const readyConnection = findReadyConnection(client, botUser);
 
-  for (const guild of client.guilds.cache.values()) {
-    const voiceState = guild.members.cache.get(client.user.id)?.voice;
-    if (voiceState?.channel) {
-      guildId = guild.id;
-      connection = getConnection(guildId);
-      if (connection && connection.state.status === VoiceConnectionStatus.Ready) {
-        break;
-      }
-      connection = null;
-    }
+  if (readyConnection) {
+    logger.info({ guildId: readyConnection.guildId, soundPath }, 'Playing audio file');
+    await playAudioFile(readyConnection.connection, readyConnection.guildId, soundPath);
+    logger.info({ guildId: readyConnection.guildId, soundPath }, 'Audio file playback completed');
+    return;
   }
 
-  if (!connection) {
-    let targetChannel = null;
-
-    logger.debug(
-      { guildCount: client.guilds.cache.size },
-      'Searching for non-empty voice channels'
-    );
-
-    for (const guild of client.guilds.cache.values()) {
-      try {
-        await guild.channels.fetch();
-
-        const channelsWithMembers = new Set<string>();
-
-        const voiceStates = guild.voiceStates.cache;
-        for (const [userId, voiceState] of voiceStates.entries()) {
-          if (voiceState.channel && userId !== client.user.id) {
-            channelsWithMembers.add(voiceState.channel.id);
-          }
-        }
-
-        logger.debug(
-          {
-            guildId: guild.id,
-            channelCount: channelsWithMembers.size,
-            channels: Array.from(channelsWithMembers),
-          },
-          'Found channels with members'
-        );
-
-        for (const channel of guild.channels.cache.values()) {
-          if (channel.isVoiceBased() && channelsWithMembers.has(channel.id)) {
-            logger.debug(
-              { channelId: channel.id, channelName: channel.name },
-              'Checking voice channel'
-            );
-            const botMember = guild.members.cache.get(client.user.id);
-            const voiceState = botMember?.voice;
-            if (!voiceState?.channel || voiceState.channel.id !== channel.id) {
-              logger.debug(
-                { channelId: channel.id },
-                'Bot not in this channel, checking permissions'
-              );
-              const permissions = channel.permissionsFor(client.user);
-              const hasPermissions = permissions?.has(['Connect', 'Speak']);
-              logger.debug({ channelId: channel.id, hasPermissions }, 'Permission check result');
-              if (hasPermissions) {
-                targetChannel = channel;
-                logger.info(
-                  { channelId: channel.id, channelName: channel.name, guildId: guild.id },
-                  'Found target voice channel'
-                );
-                break;
-              }
-            } else {
-              logger.debug({ channelId: channel.id }, 'Bot already in this channel');
-            }
-          }
-        }
-
-        if (targetChannel) break;
-      } catch (error) {
-        logger.warn(
-          { err: error, guildId: guild.id },
-          'Error searching for voice channels in guild'
-        );
-        continue;
-      }
-    }
-
-    if (!targetChannel) {
-      logger.warn('No non-empty voice channels found to connect to');
-      throw new Error('No non-empty voice channels found to connect to');
-    }
-
-    logger.info({ channelId: targetChannel.id }, 'Connecting to voice channel');
-    try {
-      connection = await Promise.race([
-        connectToVoiceChannel(targetChannel),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Connection timeout after 30 seconds')), 30_000)
-        ),
-      ]);
-      guildId = targetChannel.guild.id;
-      logger.info({ channelId: targetChannel.id, guildId }, 'Connected to voice channel');
-    } catch (error) {
-      logger.error(
-        { err: error, channelId: targetChannel.id },
-        'Failed to connect to voice channel'
-      );
-      throw error;
-    }
-  }
-
-  if (!guildId) {
-    throw new Error('No guild ID available');
-  }
-
-  logger.info({ guildId, soundPath }, 'Playing audio file');
-  await playAudioFile(connection, guildId, soundPath);
-  logger.info({ guildId, soundPath }, 'Audio file playback completed');
+  const targetChannel = await findTargetVoiceChannel(client, botUser);
+  logger.info({ channelId: targetChannel.id }, 'Connecting to voice channel');
+  logger.info({ guildId: targetChannel.guild.id, soundPath }, 'Playing audio file');
+  await playSoundInChannel(targetChannel, soundPath);
+  logger.info({ guildId: targetChannel.guild.id, soundPath }, 'Audio file playback completed');
 }
 
 export function disconnectBot(client: Client): void {
