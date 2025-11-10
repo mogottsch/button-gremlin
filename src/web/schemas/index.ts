@@ -9,6 +9,7 @@ export const soundSchema = z.object({
   displayName: z.string(),
   size: z.number(),
   uploadedAt: z.string().datetime(),
+  tags: z.array(z.string()).default([]),
 });
 
 export const soundListSchema = z.array(soundSchema);
@@ -42,3 +43,5 @@ export type UploadResponse = z.infer<typeof uploadResponseSchema>;
 export type BotStatus = z.infer<typeof botStatusSchema>;
 export type BotPlayRequest = z.infer<typeof botPlayRequestSchema>;
 export type BotPlayResponse = z.infer<typeof botPlayResponseSchema>;
+
+export const tagsListSchema = z.array(z.string());

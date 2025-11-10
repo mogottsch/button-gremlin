@@ -23,10 +23,9 @@
     "declarationMap": true,
     "sourceMap": true,
     "outDir": "./dist",
-    "rootDir": "./src",
     "incremental": true,
     "noEmit": false
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "metadata/**/*", "migration.ts"],
   "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.spec.ts"]
 }

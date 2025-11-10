@@ -1,22 +1,58 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import type { Sound } from '@backend/web/schemas/index.js';
 import { api } from '../services/api';
 import { SoundCard } from './SoundCard';
 import { UploadForm } from './UploadForm';
-import { Input } from './ui/input';
 import { Button } from './ui/button';
-import { Search, Upload, Loader2, Music } from 'lucide-react';
+import { Upload, Loader2, Music } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface SoundListProps {
   onPlaySound: (sound: Sound) => void;
+  searchQuery: string;
+  selectedTags: string[];
+  isDefaultState: boolean;
+  onSoundsLoaded?: () => void;
 }
 
-export function SoundList({ onPlaySound }: SoundListProps) {
+const ALLOWED_TYPES = [
+  'audio/mpeg',
+  'audio/wav',
+  'audio/ogg',
+  'audio/mp4',
+  'audio/flac',
+  'audio/webm',
+  'audio/opus',
+];
+const ALLOWED_EXTENSIONS = ['.mp3', '.wav', '.ogg', '.m4a', '.flac', '.webm', '.opus'];
+const MAX_SIZE = 10 * 1024 * 1024;
+
+export function SoundList({
+  onPlaySound,
+  searchQuery,
+  selectedTags,
+  isDefaultState,
+  onSoundsLoaded,
+}: SoundListProps) {
   const [sounds, setSounds] = useState<Sound[]>([]);
   const [filteredSounds, setFilteredSounds] = useState<Sound[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [showUpload, setShowUpload] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+
+  const validateFile = useCallback((file: File): string | null => {
+    const ext = file.name.toLowerCase().match(/\.[^.]+$/)?.[0];
+
+    if (!ALLOWED_TYPES.includes(file.type) && !(ext && ALLOWED_EXTENSIONS.includes(ext))) {
+      return 'Invalid file type. Allowed: mp3, wav, ogg, m4a, flac, webm, opus';
+    }
+
+    if (file.size > MAX_SIZE) {
+      return 'File too large. Maximum size is 10MB';
+    }
+
+    return null;
+  }, []);
 
   const loadSounds = async () => {
     try {
@@ -24,6 +60,9 @@ export function SoundList({ onPlaySound }: SoundListProps) {
       const data = await api.sounds.list();
       setSounds(data);
       setFilteredSounds(data);
+      if (onSoundsLoaded) {
+        onSoundsLoaded();
+      }
     } catch (error) {
       console.error('Failed to load sounds:', error);
     } finally {
@@ -33,17 +72,53 @@ export function SoundList({ onPlaySound }: SoundListProps) {
 
   useEffect(() => {
     void loadSounds();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     const query = searchQuery.toLowerCase();
-    const filtered = sounds.filter((sound) => sound.displayName.toLowerCase().includes(query));
+    const filtered = sounds.filter((sound) => {
+      const matchesSearch = sound.displayName.toLowerCase().includes(query);
+      // In default state (no specific tags selected), show all sounds
+      const matchesTags = isDefaultState || selectedTags.some((tag) => sound.tags?.includes(tag));
+      return matchesSearch && matchesTags;
+    });
     setFilteredSounds(filtered);
-  }, [searchQuery, sounds]);
+  }, [searchQuery, sounds, selectedTags, isDefaultState]);
 
   const handleUploadSuccess = () => {
     setShowUpload(false);
     void loadSounds();
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const droppedFile = e.dataTransfer.files[0];
+    if (droppedFile) {
+      const error = validateFile(droppedFile);
+      if (error) {
+        toast.error(error);
+        return;
+      }
+      try {
+        await api.sounds.upload(droppedFile);
+        toast.success('Sound uploaded successfully');
+        void loadSounds();
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : 'Upload failed');
+      }
+    }
   };
 
   if (loading) {
@@ -55,21 +130,22 @@ export function SoundList({ onPlaySound }: SoundListProps) {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex gap-3">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Search sounds..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10"
-          />
-        </div>
-        <Button onClick={() => setShowUpload(true)}>
-          <Upload />
-          Upload
-        </Button>
+    <div
+      className="space-y-6"
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      <div
+        className={`flex items-center gap-2 rounded-md border-2 border-dashed px-4 py-3 transition-all cursor-pointer ${
+          isDragging
+            ? 'border-primary bg-primary/5'
+            : 'border-border hover:border-primary/50 hover:bg-accent/5'
+        }`}
+        onClick={() => setShowUpload(true)}
+      >
+        <Upload className="h-4 w-4" />
+        <span className="text-sm font-medium">Drag or Click to Upload</span>
       </div>
 
       {filteredSounds.length === 0 ? (
@@ -87,7 +163,7 @@ export function SoundList({ onPlaySound }: SoundListProps) {
           )}
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 items-start overflow-auto">
           {filteredSounds.map((sound) => (
             <SoundCard key={sound.name} sound={sound} onPlay={onPlaySound} onDelete={loadSounds} />
           ))}

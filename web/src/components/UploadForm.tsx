@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import type { DragEvent } from 'react';
 import {
   Dialog,
@@ -18,6 +18,7 @@ interface UploadFormProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
+  initialFile?: File;
 }
 
 const ALLOWED_TYPES = [
@@ -32,7 +33,7 @@ const ALLOWED_TYPES = [
 const ALLOWED_EXTENSIONS = ['.mp3', '.wav', '.ogg', '.m4a', '.flac', '.webm', '.opus'];
 const MAX_SIZE = 10 * 1024 * 1024;
 
-export function UploadForm({ open, onOpenChange, onSuccess }: UploadFormProps) {
+export function UploadForm({ open, onOpenChange, onSuccess, initialFile }: UploadFormProps) {
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -119,6 +120,17 @@ export function UploadForm({ open, onOpenChange, onSuccess }: UploadFormProps) {
       onOpenChange(false);
     }
   };
+
+  useEffect(() => {
+    if (open && initialFile) {
+      const error = validateFile(initialFile);
+      if (!error) {
+        setFile(initialFile);
+      } else {
+        toast.error(error);
+      }
+    }
+  }, [open, initialFile, validateFile]);
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
