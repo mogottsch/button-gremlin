@@ -4,9 +4,15 @@ import { registerReadyEvent } from './events/ready.js';
 import { registerInteractionEvent } from './events/interactionCreate.js';
 import { createWebServer } from './web/index.js';
 import { logger } from './logger.js';
+import { migrate } from './migration.js';
 
 async function main(): Promise<void> {
   try {
+    // Run migrations first
+    logger.info('Running database migrations...');
+    migrate();
+    logger.info('Migrations completed successfully');
+
     const config = getConfig();
 
     const client = new Client({

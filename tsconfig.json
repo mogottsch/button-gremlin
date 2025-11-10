@@ -26,6 +26,6 @@
     "incremental": true,
     "noEmit": false
   },
-  "include": ["src/**/*", "metadata/**/*", "migration.ts"],
+  "include": ["src/**/*", "metadata/**/*"],
   "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.spec.ts"]
 }
