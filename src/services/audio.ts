@@ -70,17 +70,28 @@ function scheduleIdleDisconnectIfIdle(guildId: string): void {
   }
 }
 
-async function handleDisconnected(connection: VoiceConnection, guildId: string): Promise<void> {
+export async function handleDisconnected(
+  connection: VoiceConnection,
+  guildId: string
+): Promise<void> {
   try {
     await Promise.race([
       entersState(connection, VoiceConnectionStatus.Signalling, 5_000),
       entersState(connection, VoiceConnectionStatus.Connecting, 5_000),
     ]);
   } catch {
-    connection.destroy();
+    // Explicit disconnect/reuse retires the old connection before replacing it.
+    // Never destroy it here: even destroy(false) removes Discord's guild voice
+    // adapter registration and can break a newer connection.
+    if (connections.get(guildId) !== connection) {
+      return;
+    }
     connections.delete(guildId);
     players.delete(guildId);
     clearIdleDisconnect(guildId);
+    if (connection.state.status !== VoiceConnectionStatus.Destroyed) {
+      connection.destroy();
+    }
   }
 }
 
@@ -169,9 +180,11 @@ export function disconnectFromVoiceChannel(guildId: string): void {
   const connection = connections.get(guildId);
 
   if (connection) {
-    connection.destroy();
     connections.delete(guildId);
     players.delete(guildId);
+    if (connection.state.status !== VoiceConnectionStatus.Destroyed) {
+      connection.destroy();
+    }
   }
 }
 
