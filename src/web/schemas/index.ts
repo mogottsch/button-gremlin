@@ -1,9 +1,5 @@
 import { z } from 'zod';
 
-export const authVerifySchema = z.object({
-  key: z.string().min(1),
-});
-
 export const soundSchema = z.object({
   name: z.string(),
   displayName: z.string(),
@@ -36,7 +32,6 @@ export const botPlayResponseSchema = z.object({
   message: z.string(),
 });
 
-export type AuthVerify = z.infer<typeof authVerifySchema>;
 export type Sound = z.infer<typeof soundSchema>;
 export type SoundList = z.infer<typeof soundListSchema>;
 export type UploadResponse = z.infer<typeof uploadResponseSchema>;

@@ -9,7 +9,7 @@ import { Toaster } from './components/ui/sonner';
 import { api } from './services/api';
 
 function App() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, loading } = useAuth();
   const [currentSound, setCurrentSound] = useState<Sound | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [allTags, setAllTags] = useState<string[]>([]);
@@ -29,6 +29,12 @@ function App() {
   useEffect(() => {
     if (isAuthenticated) {
       void loadTags();
+    } else {
+      setCurrentSound(null);
+      setAllTags([]);
+      setSelectedTags([]);
+      setSearchQuery('');
+      setDeleteMode(false);
     }
   }, [isAuthenticated]);
 
@@ -78,6 +84,8 @@ function App() {
       return validTags;
     });
   };
+
+  if (loading) return <div role="status">Checking session…</div>;
 
   if (!isAuthenticated) {
     return (

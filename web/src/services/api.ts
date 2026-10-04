@@ -1,28 +1,27 @@
-import type { Sound, BotStatus, BotPlayRequest, AuthVerify } from '@backend/web/schemas/index.js';
+import { apiFetch } from './request';
+import type { Sound, BotStatus, BotPlayRequest } from '@backend/web/schemas/index.js';
 
 const API_BASE_URL = '/api';
 
-function getAuthHeaders(): HeadersInit {
-  const apiKey = localStorage.getItem('apiKey');
-  return apiKey ? { Authorization: `Bearer ${apiKey}` } : {};
-}
-
 export const api = {
   auth: {
-    verify: async (key: string): Promise<{ valid: boolean; error?: string }> => {
-      const response = await fetch(`${API_BASE_URL}/auth/verify`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key } as AuthVerify),
-      });
+    session: async (): Promise<{
+      authenticated: boolean;
+      identity?: { subject: string; name: string; avatarUrl?: string };
+      csrfToken?: string;
+    }> => {
+      const response = await apiFetch(`${API_BASE_URL}/auth/session`);
+      if (!response.ok) throw new Error('Unable to check session');
       return response.json();
+    },
+    logout: async (): Promise<void> => {
+      const response = await apiFetch(`${API_BASE_URL}/auth/logout`, { method: 'POST' });
+      if (!response.ok) throw new Error('Logout failed; please retry');
     },
   },
   sounds: {
     list: async (): Promise<Sound[]> => {
-      const response = await fetch(`${API_BASE_URL}/sounds`, {
-        headers: getAuthHeaders(),
-      });
+      const response = await apiFetch(`${API_BASE_URL}/sounds`, {});
       if (!response.ok) {
         if (response.status === 401) {
           throw new Error('Unauthorized');
@@ -31,13 +30,18 @@ export const api = {
       }
       return response.json();
     },
-    streamUrl: (name: string) => `${API_BASE_URL}/sounds/${name}/stream`,
+    streamUrl: (name: string) => `${API_BASE_URL}/sounds/${encodeURIComponent(name)}/stream`,
+    stream: async (name: string, signal?: AbortSignal): Promise<Blob> => {
+      const response = await apiFetch(api.sounds.streamUrl(name), { signal });
+      if (!response.ok) throw new Error('Failed to load audio');
+      return response.blob();
+    },
     upload: async (file: File): Promise<{ success: boolean; sound?: Sound; error?: string }> => {
       const formData = new FormData();
       formData.append('sound', file);
-      const response = await fetch(`${API_BASE_URL}/sounds/upload`, {
+      const response = await apiFetch(`${API_BASE_URL}/sounds/upload`, {
         method: 'POST',
-        headers: getAuthHeaders(),
+
         body: formData,
       });
       if (!response.ok) {
@@ -49,9 +53,8 @@ export const api = {
       return response.json();
     },
     delete: async (name: string): Promise<void> => {
-      const response = await fetch(`${API_BASE_URL}/sounds/${name}`, {
+      const response = await apiFetch(`${API_BASE_URL}/sounds/${encodeURIComponent(name)}`, {
         method: 'DELETE',
-        headers: getAuthHeaders(),
       });
       if (!response.ok) {
         if (response.status === 401) {
@@ -61,9 +64,7 @@ export const api = {
       }
     },
     getTags: async (): Promise<string[]> => {
-      const response = await fetch(`${API_BASE_URL}/sounds/tags`, {
-        headers: getAuthHeaders(),
-      });
+      const response = await apiFetch(`${API_BASE_URL}/sounds/tags`, {});
       if (!response.ok) {
         if (response.status === 401) {
           throw new Error('Unauthorized');
@@ -73,9 +74,9 @@ export const api = {
       return response.json();
     },
     createTag: async (tag: string): Promise<void> => {
-      const response = await fetch(`${API_BASE_URL}/sounds/tags`, {
+      const response = await apiFetch(`${API_BASE_URL}/sounds/tags`, {
         method: 'POST',
-        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ tag }),
       });
       if (!response.ok) {
@@ -90,9 +91,8 @@ export const api = {
       }
     },
     deleteTag: async (tag: string): Promise<void> => {
-      const response = await fetch(`${API_BASE_URL}/sounds/tags/${encodeURIComponent(tag)}`, {
+      const response = await apiFetch(`${API_BASE_URL}/sounds/tags/${encodeURIComponent(tag)}`, {
         method: 'DELETE',
-        headers: getAuthHeaders(),
       });
       if (!response.ok) {
         if (response.status === 401) {
@@ -108,11 +108,14 @@ export const api = {
       name: string,
       metadata: { displayName?: string; tags?: string[] }
     ): Promise<void> => {
-      const response = await fetch(`${API_BASE_URL}/sounds/${name}/metadata`, {
-        method: 'PATCH',
-        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
-        body: JSON.stringify(metadata),
-      });
+      const response = await apiFetch(
+        `${API_BASE_URL}/sounds/${encodeURIComponent(name)}/metadata`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(metadata),
+        }
+      );
       if (!response.ok) {
         if (response.status === 401) {
           throw new Error('Unauthorized');
@@ -123,9 +126,7 @@ export const api = {
   },
   bot: {
     status: async (): Promise<BotStatus> => {
-      const response = await fetch(`${API_BASE_URL}/bot/status`, {
-        headers: getAuthHeaders(),
-      });
+      const response = await apiFetch(`${API_BASE_URL}/bot/status`, {});
       if (!response.ok) {
         if (response.status === 401) {
           throw new Error('Unauthorized');
@@ -135,9 +136,9 @@ export const api = {
       return response.json();
     },
     play: async (soundName: string): Promise<{ success: boolean; message: string }> => {
-      const response = await fetch(`${API_BASE_URL}/bot/play`, {
+      const response = await apiFetch(`${API_BASE_URL}/bot/play`, {
         method: 'POST',
-        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ soundName } as BotPlayRequest),
       });
       if (!response.ok) {
@@ -150,9 +151,8 @@ export const api = {
       return response.json();
     },
     disconnect: async (): Promise<void> => {
-      const response = await fetch(`${API_BASE_URL}/bot/disconnect`, {
+      const response = await apiFetch(`${API_BASE_URL}/bot/disconnect`, {
         method: 'POST',
-        headers: getAuthHeaders(),
       });
       if (!response.ok) {
         if (response.status === 401) {

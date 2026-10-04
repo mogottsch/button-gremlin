@@ -1,4 +1,4 @@
-FROM node:20-alpine AS base
+FROM node:22.22.0-alpine AS base
 
 RUN apk add --no-cache ffmpeg
 
@@ -9,7 +9,9 @@ FROM base AS backend-deps
 WORKDIR /app
 
 COPY package.json pnpm-lock.yaml ./
-RUN pnpm install --frozen-lockfile
+RUN apk add --no-cache --virtual .build-deps python3 make g++ \
+    && pnpm install --frozen-lockfile \
+    && apk del .build-deps
 
 FROM base AS web-deps
 

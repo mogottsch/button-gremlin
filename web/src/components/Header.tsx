@@ -28,7 +28,7 @@ export function Header({
   onDeleteModeToggle,
   onTagsUpdated,
 }: HeaderProps) {
-  const { logout } = useAuth();
+  const { logout, error } = useAuth();
 
   return (
     <header className="sticky top-0 z-40 border-b backdrop-blur-xl bg-card/80">
@@ -45,10 +45,17 @@ export function Header({
               <p className="text-xs text-muted-foreground">Discord Soundboard</p>
             </div>
           </div>
-          <Button variant="outline" onClick={logout} className="rounded-lg">
+          <Button
+            variant="outline"
+            onClick={() => {
+              void logout();
+            }}
+            className="rounded-lg"
+          >
             Logout
           </Button>
         </div>
+        {error && <p role="alert">{error}</p>}
         <SearchBar value={searchQuery} onChange={onSearchChange} />
         <TagFilter
           allTags={allTags}

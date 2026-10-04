@@ -15,7 +15,35 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7.4.2-alpine
+        ports: ['6379:6379']
+        options: --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 3s --health-retries 5
+    env:
+      REDIS_TEST_URL: redis://127.0.0.1:6379
+      LOG_PRETTY: 'false'
+      TEST_SCRATCH_DIR: ${{ runner.temp }}/bg-auth
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 8.15.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.0
+          cache: pnpm
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            web/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile && pnpm --dir web install --frozen-lockfile
+      - run: pnpm test && pnpm --dir web test && pnpm typecheck && pnpm lint && pnpm --dir web lint && pnpm build:all
+      - run: pnpm --dir web exec playwright install --with-deps chromium
+      - run: pnpm --dir web test:e2e
   build-and-push:
+    needs: verify
     runs-on: ubuntu-latest
     permissions:
       contents: read

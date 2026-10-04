@@ -1,3 +1,4 @@
+import type { AuthConfig } from '../web/auth/config.js';
 import {
   ChatInputCommandInteraction,
   SlashCommandBuilder,
@@ -11,7 +12,7 @@ export interface Config {
   web: {
     enabled: boolean;
     port: number;
-    apiKey: string;
+    auth?: AuthConfig;
   };
   logging: {
     level: 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal';

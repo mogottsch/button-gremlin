@@ -1,6 +1,31 @@
 import pino from 'pino';
 import type { Config } from './types/index.js';
 
+// Never serialize callback query strings or raw upstream/Redis error messages.
+export const authLogOptions: pino.LoggerOptions = {
+  redact: {
+    paths: [
+      'req.headers.cookie',
+      'req.headers.authorization',
+      'req.headers["x-csrf-token"]',
+      'res.headers["set-cookie"]',
+      'clientSecret',
+      'sessionSecret',
+      'redisUrl',
+      'automationKey',
+    ],
+    censor: '[REDACTED]',
+  },
+  serializers: {
+    req: (request: { method?: string; url?: string; id?: string }): object => ({
+      method: request.method,
+      url: (request.url ?? '').split('?')[0],
+      id: request.id,
+    }),
+    err: (): object => ({ message: 'Operation failed' }),
+  },
+};
+
 export type LogLevel = 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal';
 
 interface LoggerConfig {
@@ -11,6 +36,7 @@ interface LoggerConfig {
 
 function createLogger(config: LoggerConfig): pino.Logger {
   const options: pino.LoggerOptions = {
+    ...authLogOptions,
     level: config.level,
   };
 
@@ -37,6 +63,7 @@ function createLogger(config: LoggerConfig): pino.Logger {
 
 export function createLoggerFromConfig(config: Config): pino.Logger {
   return createLogger({
+    ...authLogOptions,
     level: config.logging.level,
     pretty: config.logging.pretty,
     destination: config.logging.destination,
@@ -45,6 +72,7 @@ export function createLoggerFromConfig(config: Config): pino.Logger {
 
 export function createFastifyLogger(config: Config): pino.LoggerOptions | pino.Logger {
   const loggerConfig: pino.LoggerOptions = {
+    ...authLogOptions,
     level: config.logging.level,
   };
 

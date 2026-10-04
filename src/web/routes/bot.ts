@@ -5,7 +5,10 @@ import { botPlayRequestSchema, botPlayResponseSchema, botStatusSchema } from '..
 import * as botService from '../services/bot-service.js';
 import * as soundService from '../services/sound-service.js';
 
-export function createBotRoutes(client: Client): FastifyPluginAsync {
+export function createBotRoutes(
+  client: Client,
+  service: typeof botService = botService
+): FastifyPluginAsync {
   const routes: FastifyPluginAsync = async (fastify) => {
     fastify.get(
       '/status',
@@ -17,12 +20,12 @@ export function createBotRoutes(client: Client): FastifyPluginAsync {
           },
           tags: ['bot'],
           description: 'Get Discord bot status',
-          security: [{ bearerAuth: [] }],
+          security: [{ sessionAuth: [] }, { bearerAuth: [] }],
         },
       },
       async (_request, reply) => {
         try {
-          const status = botService.getBotStatus(client);
+          const status = service.getBotStatus(client);
           return status;
         } catch (error) {
           fastify.log.error(error);
@@ -44,7 +47,7 @@ export function createBotRoutes(client: Client): FastifyPluginAsync {
           },
           tags: ['bot'],
           description: 'Play sound in Discord',
-          security: [{ bearerAuth: [] }],
+          security: [{ sessionAuth: [] }, { bearerAuth: [] }],
         },
       },
       async (request, reply) => {
@@ -56,7 +59,7 @@ export function createBotRoutes(client: Client): FastifyPluginAsync {
             return reply.status(404).send({ success: false, message: 'Sound not found' });
           }
 
-          void botService.playSound(client, sound.path).catch((error) => {
+          void service.playSound(client, sound.path).catch((error) => {
             fastify.log.error({ err: error, soundName }, 'Error playing sound in background');
           });
 
@@ -97,12 +100,12 @@ export function createBotRoutes(client: Client): FastifyPluginAsync {
           },
           tags: ['bot'],
           description: 'Disconnect from voice channel',
-          security: [{ bearerAuth: [] }],
+          security: [{ sessionAuth: [] }, { bearerAuth: [] }],
         },
       },
       async (_request, reply) => {
         try {
-          botService.disconnectBot(client);
+          service.disconnectBot(client);
           return { success: true, message: 'Disconnected from voice channel' };
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Failed to disconnect';
