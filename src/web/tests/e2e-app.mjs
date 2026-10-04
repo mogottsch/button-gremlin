@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fakeProvider } from './fake-oidc-server.mjs';
 import { RedisAuthStore } from '../auth/store.ts';
 import { OidcRuntime } from '../auth/oidc.ts';
-import { buildWebApp } from '../app.ts';
+
 const dist = path.resolve('web/dist');
 const scratch = process.env.TEST_SCRATCH_DIR ?? process.env.TMPDIR ?? '/opt/data/cache/scratch';
 await mkdir(scratch, { recursive: true });
@@ -27,7 +27,9 @@ await writeFile(
   path.join(tmp, 'sounds/metadata/fixture_meta.json'),
   JSON.stringify({ displayName: 'Fixture Sound', filename: 'fixture.wav', tags: ['fixture'] })
 );
-await writeFile(path.join(tmp, 'tags.json'), '["fixture"]');
+process.env.BUTTON_GREMLIN_TAGS_FILE = path.join(tmp, 'sounds/metadata/tags.json');
+await writeFile(process.env.BUTTON_GREMLIN_TAGS_FILE, '["fixture"]');
+const { buildWebApp } = await import('../app.ts');
 process.chdir(tmp);
 const provider = await fakeProvider();
 const store = await RedisAuthStore.connect(
@@ -37,7 +39,7 @@ const store = await RedisAuthStore.connect(
 const config = {
   issuer: provider.issuer,
   origin: 'http://127.0.0.1:13000',
-  redirectUri: 'http://127.0.0.1:13000/api/auth/oidc/callback',
+  redirectUri: 'http://127.0.0.1:13000/api/auth/callback',
   brokerBase: provider.issuer.slice(0, -1),
   clientId: 'bg',
   clientSecret: 'fixture',

@@ -49,11 +49,7 @@ export function readAuthConfig(env: Record<string, string | undefined> = process
     throw new Error('Canonical origin required');
   const redirectUri = required('OIDC_REDIRECT_URI');
   const redirect = checkedUrl(redirectUri, insecureTest);
-  if (
-    redirect.origin !== origin ||
-    redirect.pathname !== '/api/auth/oidc/callback' ||
-    redirect.search
-  )
+  if (redirect.origin !== origin || redirect.pathname !== '/api/auth/callback' || redirect.search)
     throw new Error('Exact callback required');
   const brokerBase = required('OIDC_BROKER_BASE_URL');
   if (checkedUrl(brokerBase, insecureTest).origin !== brokerBase)

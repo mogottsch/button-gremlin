@@ -4,11 +4,53 @@ import { buildWebApp } from '../app.ts';
 import { RedisAuthStore } from '../auth/store.ts';
 import { txCookieName } from '../auth/routes.ts';
 import { randomToken } from '../auth/store.ts';
+import { createClient } from 'redis';
 const url = process.env.REDIS_TEST_URL;
+test(
+  'expired transaction clears only its browser cookie at the login-visible scope',
+  { skip: !url },
+  async () => {
+    const { app, store, config } = await fixture();
+    try {
+      const state = randomToken();
+      const name = txCookieName(state, false);
+      const other = txCookieName(randomToken(), false);
+      const binding = randomToken();
+      await store.putTransaction(state, {
+        binding,
+        nonce: randomToken(),
+        verifier: randomToken(),
+        returnTo: '/',
+      });
+      const redis = createClient({ url });
+      await redis.connect();
+      try {
+        await redis.pExpire(store.key('tx', state), 1);
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        assert.equal(await redis.exists(store.key('tx', state)), 0);
+      } finally {
+        await redis.close();
+      }
+      const response = await app.inject({
+        url: '/api/auth/callback?state=' + state + '&code=expired',
+        headers: { cookie: name + '=' + binding + '; ' + other + '=' + randomToken() },
+      });
+      assert.equal(response.headers.location, config.origin + '/?authError=login_failed');
+      const cleared = response.headers['set-cookie'];
+      assert.ok(cleared?.startsWith(name + '='));
+      assert.match(cleared, /Path=\/api\/auth;/);
+      assert.match(cleared, /Expires=Thu, 01 Jan 1970/);
+      assert.ok(!cleared.includes(other));
+    } finally {
+      await app.close();
+      await store.close();
+    }
+  }
+);
 async function fixture(options = {}) {
   const config = {
     origin: 'https://button-gremlin.moket-home.de',
-    redirectUri: 'https://button-gremlin.moket-home.de/api/auth/oidc/callback',
+    redirectUri: 'https://button-gremlin.moket-home.de/api/auth/callback',
     issuer: 'https://fixture/',
     insecureTest: false,
     automationEnabled: false,
@@ -110,13 +152,7 @@ test(
       const login = await app.inject({ url: '/api/auth/login?returnTo=%2F' });
       assert.equal(login.statusCode, 302);
       const txCookie = login.headers['set-cookie'];
-      for (const flag of [
-        'Secure',
-        'HttpOnly',
-        'SameSite=Lax',
-        'Path=/api/auth/oidc/callback',
-        'Max-Age=600',
-      ])
+      for (const flag of ['Secure', 'HttpOnly', 'SameSite=Lax', 'Path=/api/auth;', 'Max-Age=600'])
         assert.ok(txCookie.includes(flag));
       assert.ok(!txCookie.includes('Domain='));
       for (const cookie of ['__Host-bg_session=%ZZ', '__Host-bg_session=a; __Host-bg_session=b'])
@@ -126,10 +162,7 @@ test(
           )
         );
       for (const query of ['?state=a', '?state=a&state=b', '?state=%ZZ'])
-        assert.equal(
-          (await app.inject({ url: '/api/auth/oidc/callback' + query })).statusCode,
-          302
-        );
+        assert.equal((await app.inject({ url: '/api/auth/callback' + query })).statusCode, 302);
       const states = [randomToken(), randomToken()];
       let cookie;
       for (const state of states) {
@@ -141,7 +174,7 @@ test(
         };
         await store.putTransaction(state, tx);
         const response = await app.inject({
-          url: '/api/auth/oidc/callback?state=' + state + '&code=fixture',
+          url: '/api/auth/callback?state=' + state + '&code=fixture',
           headers: { cookie: txCookieName(state, false) + '=' + tx.binding, host: 'evil.test' },
         });
         assert.equal(response.headers.location, config.origin + '/?ok=1');

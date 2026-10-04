@@ -8,7 +8,7 @@ import { cookieName, strictCookies, requestSession, validMutation } from '../plu
 export const txCookieName = (state: string, insecure: boolean): string =>
   (insecure ? 'bg_oidc_tx_' : '__Secure-bg_oidc_tx_') +
   createHash('sha256').update(state).digest('hex').slice(0, 24);
-const CALLBACK = '/api/auth/oidc/callback';
+const TRANSACTION_COOKIE_PATH = '/api/auth';
 export function createAuthRoutes(runtime: AuthRuntime): FastifyPluginAsync {
   return async (app) => {
     const { config, store, oidc } = runtime;
@@ -55,7 +55,7 @@ export function createAuthRoutes(runtime: AuthRuntime): FastifyPluginAsync {
         await store.putTransaction(state, tx);
         reply.setCookie(txCookieName(state, config.insecureTest), tx.binding, {
           ...cookieOptions,
-          path: CALLBACK,
+          path: TRANSACTION_COOKIE_PATH,
           maxAge: TRANSACTION_SECONDS,
         });
         return reply.redirect(url);
@@ -63,7 +63,7 @@ export function createAuthRoutes(runtime: AuthRuntime): FastifyPluginAsync {
         return reply.code(503).send({ error: 'Authentication unavailable' });
       }
     });
-    app.get('/oidc/callback', async (request, reply) => {
+    app.get('/callback', async (request, reply) => {
       const failure = (): FastifyReply =>
         reply.redirect(config.origin + '/?authError=login_failed');
       try {
@@ -94,8 +94,9 @@ export function createAuthRoutes(runtime: AuthRuntime): FastifyPluginAsync {
         const binding = cookies[name];
         if (!binding || !/^[A-Za-z0-9_-]{43}$/.test(binding)) return failure();
         const tx = await store.takeTransaction(state, binding);
+        // Drop stale browser state even when Redis has already expired/consumed it.
+        reply.clearCookie(name, { ...cookieOptions, path: TRANSACTION_COOKIE_PATH });
         if (!tx) return failure();
-        reply.clearCookie(name, { ...cookieOptions, path: CALLBACK });
         if (params.has('error') || !params.get('code') || (params.get('code')?.length ?? 0) > 2048)
           return failure();
         let identity;

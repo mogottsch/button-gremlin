@@ -16,7 +16,7 @@ test('security logger strips callback query, cookies, bearer and errors', () => 
     {
       req: {
         method: 'GET',
-        url: '/api/auth/oidc/callback?code=SECRET-CODE&state=SECRET-STATE',
+        url: '/api/auth/callback?code=SECRET-CODE&state=SECRET-STATE',
         headers: {
           cookie: 'SECRET-COOKIE',
           authorization: 'SECRET-BEARER',
@@ -36,7 +36,7 @@ test('security logger strips callback query, cookies, bearer and errors', () => 
     'SECRET-ERROR',
   ])
     assert.ok(!log.includes(secret), secret);
-  assert.ok(log.includes('/api/auth/oidc/callback'));
+  assert.ok(log.includes('/api/auth/callback'));
 });
 test('app accepts destination-backed Pino logger instance with safe request serializer', async () => {
   const { buildWebApp } = await import('../app.ts');

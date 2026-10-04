@@ -4,6 +4,30 @@ async function login(page: import('@playwright/test').Page) {
   await page.getByRole('button', { name: 'Sign in with Discord' }).click();
   await expect(page.getByRole('button', { name: 'Logout' })).toBeVisible();
 }
+test('Chromium sends outstanding transaction cookies on login and rejects the ninth start', async ({
+  page,
+  context,
+}) => {
+  await page.goto('/');
+  // Real Chromium fetch stores Set-Cookie but stops before the identity redirect.
+  for (let i = 0; i < 8; i++) {
+    expect(
+      await page.evaluate(async () => (await fetch('/api/auth/login', { redirect: 'manual' })).type)
+    ).toBe('opaqueredirect');
+  }
+  const pending = (await context.cookies()).filter((c) => c.name.startsWith('bg_oidc_tx_'));
+  expect(pending).toHaveLength(8);
+  const ninth = await page.evaluate(async () => {
+    const response = await fetch('/api/auth/login', { redirect: 'manual' });
+    return {
+      status: response.status,
+      body: response.type === 'opaqueredirect' ? null : await response.json(),
+    };
+  });
+  expect(ninth.status).toBe(429);
+  expect(ninth.body).toEqual({ error: 'Too many pending logins' });
+  expect((await context.cookies()).filter((c) => c.name.startsWith('bg_oidc_tx_'))).toHaveLength(8);
+});
 test('broker login reload cookie audio without key, logout and replay denial', async ({
   page,
   context,

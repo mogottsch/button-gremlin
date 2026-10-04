@@ -8,7 +8,7 @@ test('real signed OIDC round trip enforces PKCE nonce issuer audience signature 
   const config = {
     issuer: p.issuer,
     origin: 'http://127.0.0.1:3000',
-    redirectUri: 'http://127.0.0.1:3000/api/auth/oidc/callback',
+    redirectUri: 'http://127.0.0.1:3000/api/auth/callback',
     brokerBase: p.issuer.slice(0, -1),
     clientId: 'bg',
     clientSecret: 'fixture',
@@ -62,7 +62,7 @@ test('discovery issuer/endpoints fail closed and failure is not permanently cach
   const config = {
     issuer: p.issuer,
     origin: 'http://127.0.0.1:3000',
-    redirectUri: 'http://127.0.0.1:3000/api/auth/oidc/callback',
+    redirectUri: 'http://127.0.0.1:3000/api/auth/callback',
     brokerBase: p.issuer.slice(0, -1),
     clientId: 'bg',
     clientSecret: 'fixture',
@@ -74,8 +74,34 @@ test('discovery issuer/endpoints fail closed and failure is not permanently cach
       await assert.rejects(() => OidcRuntime.create(config));
     }
     p.setMode('success');
+    for (const field of [
+      'authorization_endpoint',
+      'token_endpoint',
+      'jwks_uri',
+      'userinfo_endpoint',
+    ]) {
+      for (const endpoint of [
+        'https://foreign.test/endpoint',
+        'https://127.0.0.1/endpoint',
+        'https://10.0.0.1/endpoint',
+        'https://169.254.169.254/endpoint',
+        'https://[::1]/endpoint',
+      ]) {
+        p.setEndpoints({ [field]: endpoint });
+        await assert.rejects(() => OidcRuntime.create(config), field + ': ' + endpoint);
+      }
+    }
+    p.setEndpoints({});
     assert.ok(await OidcRuntime.create(config));
     await assert.rejects(() => OidcRuntime.create({ ...config, insecureTest: false }));
+    const previousEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production';
+    try {
+      await assert.rejects(() => OidcRuntime.create(config), /Insecure test mode forbidden/);
+    } finally {
+      if (previousEnv === undefined) delete process.env.NODE_ENV;
+      else process.env.NODE_ENV = previousEnv;
+    }
   } finally {
     await p.close();
   }

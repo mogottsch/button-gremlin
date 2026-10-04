@@ -30,7 +30,7 @@ test(
     const config = {
       issuer: p.issuer,
       origin: 'http://127.0.0.1:3000',
-      redirectUri: 'http://127.0.0.1:3000/api/auth/oidc/callback',
+      redirectUri: 'http://127.0.0.1:3000/api/auth/callback',
       brokerBase: p.issuer.slice(0, -1),
       clientId: 'bg',
       clientSecret: 'fixture',
@@ -82,6 +82,22 @@ test(
       ]);
       const success = callbacks.find((r) => r.headers.get('location') === config.origin + '/');
       assert.ok(success);
+      assert.equal(
+        callbacks.filter((r) => r.headers.get('location') === config.origin + '/').length,
+        1
+      );
+      assert.equal(
+        callbacks.filter((r) => r.headers.get('location')?.includes('authError=login_failed'))
+          .length,
+        1
+      );
+      for (const response of callbacks) {
+        const cleared = response.headers
+          .getSetCookie()
+          .find((c) => c.startsWith(tx.binding.split('=')[0] + '='));
+        assert.match(cleared, /Path=\/api\/auth;/);
+        assert.match(cleared, /Expires=Thu, 01 Jan 1970/);
+      }
       const cookie = cookieOf(success);
       assert.match(cookie, /bg_session=/);
       const session = await (

@@ -9,6 +9,7 @@ export async function fakeProvider() {
   const codes = new Map();
   let issuer;
   let mode = 'success';
+  let endpoints = {};
   app.get('/.well-known/openid-configuration', async (_req, reply) => {
     if (mode === 'discovery-error') return reply.code(503).send({ error: 'fixture' });
     return {
@@ -20,6 +21,7 @@ export async function fakeProvider() {
       subject_types_supported: ['public'],
       id_token_signing_alg_values_supported: ['RS256'],
       token_endpoint_auth_methods_supported: ['client_secret_basic'],
+      ...endpoints,
     };
   });
   app.get('/jwks', async () => ({ keys: [jwk] }));
@@ -99,6 +101,9 @@ export async function fakeProvider() {
     issuer,
     setMode: (v) => {
       mode = v;
+    },
+    setEndpoints: (v) => {
+      endpoints = v;
     },
     rotate: async () => {
       ({ privateKey, publicKey } = await generateKeyPair('RS256'));

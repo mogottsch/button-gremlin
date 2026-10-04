@@ -5,7 +5,7 @@ const env = {
   OIDC_ISSUER: 'https://authentik.moket-home.de/application/o/button-gremlin/',
   OIDC_CLIENT_ID: 'bg',
   OIDC_CLIENT_SECRET: 'fixture',
-  OIDC_REDIRECT_URI: 'https://button-gremlin.moket-home.de/api/auth/oidc/callback',
+  OIDC_REDIRECT_URI: 'https://button-gremlin.moket-home.de/api/auth/callback',
   OIDC_BROKER_BASE_URL: 'https://identity.moket-home.de',
   BUTTON_GREMLIN_APP_ORIGIN: 'https://button-gremlin.moket-home.de',
   BUTTON_GREMLIN_SESSION_SECRET: 'a'.repeat(43),

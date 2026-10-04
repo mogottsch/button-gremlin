@@ -10,9 +10,14 @@ export class OidcRuntime {
   static async create(config: AuthConfig): Promise<OidcRuntime> {
     if (config.insecureTest && process.env['NODE_ENV'] === 'production')
       throw new Error('Insecure test mode forbidden');
+    const issuerOrigin = checkedUrl(config.issuer, config.insecureTest).origin;
+    const trustedEndpoint = (value: string): void => {
+      if (checkedUrl(value, config.insecureTest).origin !== issuerOrigin)
+        throw new Error('OIDC endpoint origin mismatch');
+    };
     const safeFetch: typeof fetch = async (input, init) => {
       const url = input instanceof globalThis.Request ? input.url : String(input);
-      checkedUrl(url, config.insecureTest);
+      trustedEndpoint(url);
       const response = await fetch(input, {
         ...init,
         redirect: 'error',
@@ -40,7 +45,7 @@ export class OidcRuntime {
       'userinfo_endpoint',
     ] as const) {
       const value = metadata[field];
-      if (value) checkedUrl(value, config.insecureTest);
+      if (value) trustedEndpoint(value);
       else if (field !== 'userinfo_endpoint') throw new Error('Missing endpoint');
     }
     if (!metadata.id_token_signing_alg_values_supported?.includes('RS256'))
