@@ -48,6 +48,9 @@ jobs:
         env:
           TEST_SCRATCH_DIR: ${{ runner.temp }}/bg-auth
       - run: pnpm --dir web exec playwright install --with-deps chromium
+      - name: Allow the exact HTTPS Activity proxy fixture origin
+        # The cookie/SDK regression uses port 443; the hosted runner blocks it by default.
+        run: sudo sysctl -w net.ipv4.ip_unprivileged_port_start=443
       - run: pnpm --dir web test:e2e
         env:
           TEST_SCRATCH_DIR: ${{ runner.temp }}/bg-auth
