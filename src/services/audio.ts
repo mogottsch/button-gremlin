@@ -1,5 +1,6 @@
 import {
   joinVoiceChannel,
+  getVoiceConnection,
   VoiceConnection,
   VoiceConnectionStatus,
   entersState,
@@ -16,6 +17,11 @@ import { getConfig } from '../config.js';
 import logger from '../logger.js';
 
 const connections = new Map<string, VoiceConnection>();
+const pendingConnections = new Map<
+  string,
+  { channelId: string; promise: Promise<VoiceConnection> }
+>();
+const activityReservations = new Map<string, { channelId: string; users: number }>();
 const players = new Map<string, AudioPlayer>();
 const idleTimers = new Map<string, ReturnType<typeof setTimeout>>();
 let idleTimeoutLoaded = false;
@@ -56,7 +62,7 @@ function scheduleIdleDisconnect(guildId: string): void {
 }
 
 export function getConnection(guildId: string): VoiceConnection | undefined {
-  return connections.get(guildId);
+  return connections.get(guildId) ?? getVoiceConnection(guildId);
 }
 
 export function getAllConnections(): Map<string, VoiceConnection> {
@@ -146,22 +152,55 @@ async function createConnection(channel: VoiceBasedChannel): Promise<VoiceConnec
     selfMute: false,
   });
 
+  connections.set(guildId, connection);
+  const abort = new globalThis.AbortController();
+  const onDestroyed = (): void => abort.abort();
+  connection.once(VoiceConnectionStatus.Destroyed, onDestroyed);
+  const timeout = setTimeout(() => abort.abort(), 30_000);
   try {
-    await entersState(connection, VoiceConnectionStatus.Ready, 30_000);
-    connections.set(guildId, connection);
+    await entersState(connection, VoiceConnectionStatus.Ready, abort.signal);
     clearIdleDisconnect(guildId);
     scheduleIdleDisconnectIfIdle(guildId);
     attachDisconnectHandler(connection, guildId);
     return connection;
   } catch (error) {
-    connection.destroy();
-    connections.delete(guildId);
-    clearIdleDisconnect(guildId);
+    // A cancelled establishment may finish after a replacement was created.
+    if (connections.get(guildId) === connection) {
+      connections.delete(guildId);
+      clearIdleDisconnect(guildId);
+      if (connection.state.status !== VoiceConnectionStatus.Destroyed) connection.destroy();
+    }
     throw error;
+  } finally {
+    clearTimeout(timeout);
+    connection.removeListener(VoiceConnectionStatus.Destroyed, onDestroyed);
   }
 }
 
 export async function connectToVoiceChannel(channel: VoiceBasedChannel): Promise<VoiceConnection> {
+  const guildId = channel.guild.id;
+  const activity = activityReservations.get(guildId);
+  if (activity && activity.channelId !== channel.id)
+    throw new Error('Bot is busy in another channel');
+  const pending = pendingConnections.get(guildId);
+  if (pending) {
+    if (pending.channelId === channel.id) return pending.promise;
+    // Standalone callers may still move channels, but only after the first
+    // establishment finishes; never issue competing gateway joins.
+    await pending.promise;
+    return connectToVoiceChannel(channel);
+  }
+  const promise = establishConnection(channel);
+  const reservation = { channelId: channel.id, promise };
+  pendingConnections.set(guildId, reservation);
+  try {
+    return await promise;
+  } finally {
+    if (pendingConnections.get(guildId) === reservation) pendingConnections.delete(guildId);
+  }
+}
+
+async function establishConnection(channel: VoiceBasedChannel): Promise<VoiceConnection> {
   const guildId = channel.guild.id;
   clearIdleDisconnect(guildId);
   const existing = connections.get(guildId);
@@ -201,6 +240,31 @@ export function getOrCreateAudioPlayer(guildId: string): AudioPlayer {
   }
 
   return player;
+}
+
+export async function playActivitySoundInChannel(
+  channel: VoiceBasedChannel,
+  filePath: string
+): Promise<void> {
+  const guildId = channel.guild.id;
+  const current = activityReservations.get(guildId);
+  const occupiedChannel =
+    current?.channelId ??
+    pendingConnections.get(guildId)?.channelId ??
+    getConnection(guildId)?.joinConfig.channelId;
+  if (occupiedChannel && occupiedChannel !== channel.id)
+    throw new Error('Bot is busy in another channel');
+  const reservation = current ?? { channelId: channel.id, users: 0 };
+  reservation.users++;
+  activityReservations.set(guildId, reservation);
+  try {
+    await playSoundInChannel(channel, filePath);
+  } finally {
+    reservation.users--;
+    if (reservation.users === 0 && activityReservations.get(guildId) === reservation) {
+      activityReservations.delete(guildId);
+    }
+  }
 }
 
 export async function playSoundInChannel(

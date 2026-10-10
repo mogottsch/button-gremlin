@@ -5,6 +5,7 @@ import {
   playAudioFile,
   getConnection,
   playSoundInChannel,
+  playActivitySoundInChannel,
 } from '../../services/audio.js';
 import { logger } from '../../logger.js';
 
@@ -149,10 +150,7 @@ export async function playSound(
   launchChannel?: VoiceBasedChannel
 ): Promise<void> {
   if (launchChannel) {
-    const connection = getConnection(launchChannel.guild.id);
-    if (connection && connection.joinConfig.channelId !== launchChannel.id)
-      throw new Error('Bot is busy in another channel');
-    await playSoundInChannel(launchChannel, soundPath);
+    await playActivitySoundInChannel(launchChannel, soundPath);
     return;
   }
   const botUser = client.user;
