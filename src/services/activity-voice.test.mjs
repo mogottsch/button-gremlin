@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { setImmediate } from 'node:timers/promises';
-import { getVoiceConnection, VoiceConnectionStatus } from '@discordjs/voice';
+import {
+  AudioPlayerStatus,
+  entersState,
+  getVoiceConnection,
+  VoiceConnectionStatus,
+} from '@discordjs/voice';
 import { playSound } from '../web/services/bot-service.ts';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -88,73 +93,100 @@ test('disconnect during initial Activity join cancels it and allows a new channe
     const result = await Promise.race([first, setImmediate().then(() => 'still pending')]);
     assert.notEqual(result, 'still pending');
     const second = settle(playSound({}, 'never-played', b));
-    getVoiceConnection(a.guild.id).emit('error', new Error('fixture connection failure'));
-    await second;
+    disconnectFromVoiceChannel(a.guild.id);
+    await promptly(second);
     assert.deepEqual(joins(payloads), [a.id, b.id]);
     assert.equal(getConnection(a.guild.id), undefined);
   } finally {
-    if (old.listenerCount('error')) old.emit('error', new Error('fixture connection failure'));
-    await first;
     disconnectFromVoiceChannel(a.guild.id);
+    await promptly(first);
     if (old.state.status !== VoiceConnectionStatus.Destroyed) old.destroy();
   }
 });
 
-test('same-channel Activity playback keeps its reservation until both requests settle, including disconnect', async () => {
-  process.env.DISCORD_TOKEN = 'offline-test-fixture';
-  process.env.DISCORD_CLIENT_ID = 'offline-test-fixture';
-  process.env.VOICE_IDLE_TIMEOUT_SECONDS = '';
-  process.env.WEB_ENABLED = 'false';
-  const dir = await mkdtemp(join(tmpdir(), 'voice-isolation-'));
-  const file = join(dir, 'sound.wav');
-  // Valid silent PCM WAV input; no audio is sent to Discord.
-  const wav = Buffer.alloc(44 + 96000);
-  wav.write('RIFF');
-  wav.writeUInt32LE(wav.length - 8, 4);
-  wav.write('WAVEfmt ', 8);
-  wav.writeUInt32LE(16, 16);
-  wav.writeUInt16LE(1, 20);
-  wav.writeUInt16LE(2, 22);
-  wav.writeUInt32LE(48000, 24);
-  wav.writeUInt32LE(192000, 28);
-  wav.writeUInt16LE(4, 32);
-  wav.writeUInt16LE(16, 34);
-  wav.write('data', 36);
-  wav.writeUInt32LE(wav.length - 44, 40);
-  await writeFile(file, wav);
-  const { a, b, payloads } = fixture('activity-playback-reservation');
-  const first = settle(playSound({}, file, a));
-  const second = settle(playSound({}, file, a));
-  const connection = getVoiceConnection(a.guild.id);
-  const player = getOrCreateAudioPlayer(a.guild.id);
+async function promptly(promise) {
+  let timer;
   try {
-    // Resolve real entersState without starting any voice networking.
-    connection.emit(VoiceConnectionStatus.Ready);
-    for (let i = 0; i < 100 && player.listenerCount('idle') < 2; i++) await setImmediate();
-    assert.equal(player.listenerCount('idle'), 2);
-    assert.deepEqual(joins(payloads), [a.id]);
-    await assert.rejects(connectToVoiceChannel(b), /another channel/);
-    // Completing one overlapping request must not release the other's claim.
-    player.listeners('idle')[0]();
-    await first;
-    disconnectFromVoiceChannel(a.guild.id);
-    await assert.rejects(playSound({}, file, b), /another channel/);
-    player.emit('error', new Error('fixture playback failure'));
-    assert.match((await second).message, /playback failure/);
-    const next = settle(playSound({}, 'never-played', b));
-    getVoiceConnection(a.guild.id).emit('error', new Error('fixture connection failure'));
-    await next;
-    assert.deepEqual(joins(payloads), [a.id, b.id]);
+    return await Promise.race([
+      promise,
+      new Promise((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error('playback still pending after disconnect')),
+          1_000
+        );
+      }),
+    ]);
   } finally {
-    if (connection.listenerCount('error'))
-      connection.emit('error', new Error('fixture connection failure'));
-    if (player.listenerCount('error')) player.emit('error', new Error('fixture playback failure'));
-    await Promise.all([first, second]);
-    player.stop(true);
-    disconnectFromVoiceChannel(a.guild.id);
-    await rm(dir, { recursive: true, force: true });
+    clearTimeout(timer);
   }
-});
+}
+
+for (const [count, disconnectBeforePlayback] of [
+  [1, false],
+  [2, false],
+  [1, true],
+]) {
+  test(`disconnect settles ${count} outstanding Activity playback request(s)${disconnectBeforePlayback ? ' just after Ready' : ''} and releases the channel`, async () => {
+    process.env.DISCORD_TOKEN = 'offline-test-fixture';
+    process.env.DISCORD_CLIENT_ID = 'offline-test-fixture';
+    process.env.VOICE_IDLE_TIMEOUT_SECONDS = '';
+    process.env.WEB_ENABLED = 'false';
+    const dir = await mkdtemp(join(tmpdir(), 'voice-isolation-'));
+    const file = join(dir, 'sound.wav');
+    // Valid silent PCM WAV input; no audio is sent to Discord.
+    const wav = Buffer.alloc(44 + 96000);
+    wav.write('RIFF');
+    wav.writeUInt32LE(wav.length - 8, 4);
+    wav.write('WAVEfmt ', 8);
+    wav.writeUInt32LE(16, 16);
+    wav.writeUInt16LE(1, 20);
+    wav.writeUInt16LE(2, 22);
+    wav.writeUInt32LE(48000, 24);
+    wav.writeUInt32LE(192000, 28);
+    wav.writeUInt16LE(4, 32);
+    wav.writeUInt16LE(16, 34);
+    wav.write('data', 36);
+    wav.writeUInt32LE(wav.length - 44, 40);
+    await writeFile(file, wav);
+    const { a, b, payloads } = fixture(`activity-disconnect-${count}`);
+    // Attach rejection handlers immediately; node:test also detects unhandled rejections.
+    const requests = Array.from({ length: count }, () => settle(playSound({}, file, a)));
+    const connection = getVoiceConnection(a.guild.id);
+    const player = getOrCreateAudioPlayer(a.guild.id);
+    try {
+      // Resolve real entersState without starting any voice networking.
+      connection.emit(VoiceConnectionStatus.Ready);
+      if (disconnectBeforePlayback) {
+        disconnectFromVoiceChannel(a.guild.id);
+      } else {
+        await entersState(player, AudioPlayerStatus.AutoPaused, 5_000);
+        assert.equal(player.listenerCount('idle'), count);
+        assert.deepEqual(joins(payloads), [a.id]);
+        await assert.rejects(connectToVoiceChannel(b), /another channel/);
+        disconnectFromVoiceChannel(a.guild.id);
+      }
+      // No synthetic player Idle/error event: teardown itself must settle every request.
+      await promptly(Promise.all(requests));
+      assert.equal(player.state.status, AudioPlayerStatus.Idle);
+      assert.equal(player.listenerCount('idle'), 0);
+      assert.equal(player.listenerCount('error'), 0);
+      assert.equal(getVoiceConnection(a.guild.id), undefined);
+      const next = settle(playSound({}, 'never-played', b));
+      const replacement = getVoiceConnection(a.guild.id);
+      assert.ok(replacement, 'another Activity channel can establish immediately after settlement');
+      disconnectFromVoiceChannel(a.guild.id);
+      await promptly(next);
+      assert.deepEqual(joins(payloads), [a.id, b.id]);
+    } finally {
+      // Ensure the RED test can fail promptly without leaving ten-minute timers.
+      player.stop(true);
+      getOrCreateAudioPlayer(a.guild.id).stop(true);
+      disconnectFromVoiceChannel(a.guild.id);
+      await Promise.all(requests);
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+}
 
 test('standalone concurrent different-channel joins wait for establishment then retain channel-switch behavior', async () => {
   process.env.DISCORD_TOKEN = 'offline-test-fixture';

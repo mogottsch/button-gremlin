@@ -92,12 +92,7 @@ export async function handleDisconnected(
     if (connections.get(guildId) !== connection) {
       return;
     }
-    connections.delete(guildId);
-    players.delete(guildId);
-    clearIdleDisconnect(guildId);
-    if (connection.state.status !== VoiceConnectionStatus.Destroyed) {
-      connection.destroy();
-    }
+    disconnectFromVoiceChannel(guildId);
   }
 }
 
@@ -215,15 +210,18 @@ async function establishConnection(channel: VoiceBasedChannel): Promise<VoiceCon
 }
 
 export function disconnectFromVoiceChannel(guildId: string): void {
-  clearIdleDisconnect(guildId);
   const connection = connections.get(guildId);
+  const player = players.get(guildId);
+  connections.delete(guildId);
+  players.delete(guildId);
+  // Destroying the subscription only auto-pauses a NoSubscriberBehavior.Pause
+  // player. Force Idle to settle every overlapping playback and release claims.
+  player?.stop(true);
+  // Idle listeners schedule timers while settling; teardown must clear those too.
+  clearIdleDisconnect(guildId);
 
-  if (connection) {
-    connections.delete(guildId);
-    players.delete(guildId);
-    if (connection.state.status !== VoiceConnectionStatus.Destroyed) {
-      connection.destroy();
-    }
+  if (connection && connection.state.status !== VoiceConnectionStatus.Destroyed) {
+    connection.destroy();
   }
 }
 
@@ -286,6 +284,11 @@ export async function playAudioFile(
   guildId: string,
   filePath: string
 ): Promise<void> {
+  // Disconnect may win between Ready resolving and the playback continuation.
+  // Never create an unsubscribed player for an already retired connection.
+  if (connection.state.status === VoiceConnectionStatus.Destroyed) {
+    throw new Error('Voice connection disconnected before playback');
+  }
   const player = getOrCreateAudioPlayer(guildId);
   clearIdleDisconnect(guildId);
   const resource = createAudioResourceFromFile(filePath);
