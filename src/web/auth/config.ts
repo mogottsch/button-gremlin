@@ -1,5 +1,23 @@
 import { URL } from 'node:url';
+export interface ActivityConfig {
+  clientId: string;
+  clientSecret: string;
+  origin: string;
+}
+export function readActivityConfig(
+  env: Record<string, string | undefined>
+): ActivityConfig | undefined {
+  if (!bool(env['DISCORD_ACTIVITY_ENABLED'])) return undefined;
+  const clientSecret = env['DISCORD_CLIENT_SECRET'];
+  if (!clientSecret?.trim()) throw new Error('Missing DISCORD_CLIENT_SECRET');
+  return {
+    clientId: '1434488648228929629',
+    origin: 'https://1434488648228929629.discordsays.com',
+    clientSecret,
+  };
+}
 export interface AuthConfig {
+  activity?: ActivityConfig;
   issuer: string;
   clientId: string;
   clientSecret: string;
@@ -62,6 +80,7 @@ export function readAuthConfig(env: Record<string, string | undefined> = process
   const automationEnabled = bool(env['AUTOMATION_API_ENABLED']);
   const automationKey = automationEnabled ? required('WEB_API_KEY') : '';
   return {
+    activity: readActivityConfig(env),
     issuer,
     origin,
     redirectUri,

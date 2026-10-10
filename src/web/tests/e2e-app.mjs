@@ -37,6 +37,11 @@ const store = await RedisAuthStore.connect(
   'e2e-fixture-secret'.repeat(4)
 );
 const config = {
+  activity: {
+    clientId: '1434488648228929629',
+    origin: 'https://1434488648228929629.discordsays.com',
+    clientSecret: 'fixture',
+  },
   issuer: provider.issuer,
   origin: 'http://127.0.0.1:13000',
   redirectUri: 'http://127.0.0.1:13000/api/auth/callback',
@@ -49,8 +54,38 @@ const config = {
 };
 const oidc = await OidcRuntime.create(config);
 const botCalls = { play: 0, disconnect: 0 };
+const guild = {
+  id: '111111111111111111',
+  name: 'Fixture',
+  members: { fetch: async ({ user }) => ({ id: user, permissions: { has: () => true } }) },
+  voiceStates: { cache: new Map([['333333333333333333', { channelId: '222222222222222222' }]]) },
+};
+const channel = {
+  id: '222222222222222222',
+  guildId: guild.id,
+  guild,
+  name: 'Launch',
+  isVoiceBased: () => true,
+  permissionsFor: () => ({ has: () => true }),
+};
+guild.channels = { fetch: async (id) => (id === channel.id ? channel : null) };
 const app = await buildWebApp({
-  client: { isReady: () => true, user: { id: 'fixture' }, guilds: { cache: new Map() } },
+  client: {
+    isReady: () => true,
+    user: { id: 'fixture' },
+    guilds: { cache: new Map([[guild.id, guild]]) },
+  },
+  activityFetch: async (url) =>
+    Response.json(
+      url.endsWith('/oauth2/token')
+        ? { access_token: 'ACTIVITY_TRANSIENT_TOKEN', token_type: 'Bearer', expires_in: 3600 }
+        : {
+            application: { id: config.activity.clientId },
+            scopes: ['identify'],
+            expires: '2099-01-01T00:00:00Z',
+            user: { id: '333333333333333333', username: 'Fixture' },
+          }
+    ),
   botService: {
     getBotStatus: () => ({ online: true, connected: false }),
     playSound: async () => {
@@ -75,6 +110,10 @@ control.post('/revoke', async () => {
   return { ok: true };
 });
 control.get('/bot-calls', async () => botCalls);
+control.post('/activity-revoke', async () => {
+  await store.revokeSubject('https://discord.com', '333333333333333333');
+  return { ok: true };
+});
 control.get('/preserved', async () => ({
   preserved: (await readFile('sounds/fixture.wav')).equals(wav),
 }));

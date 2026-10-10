@@ -2,9 +2,11 @@ import { createContext, useContext, useState, useCallback, useEffect } from 'rea
 import type { ReactNode } from 'react';
 import { api } from '../services/api';
 import { setCsrfToken, subscribeAuthExpired } from '../services/request';
+import { isActivityLaunch, startActivity, type BrowserSession } from '../services/activity';
 interface AuthContextType {
   isAuthenticated: boolean;
   loading: boolean;
+  activity: boolean;
   identity?: { subject: string; name: string; avatarUrl?: string };
   error: string;
   login: () => void;
@@ -12,31 +14,36 @@ interface AuthContextType {
 }
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<Awaited<ReturnType<typeof api.auth.session>>>({
-    authenticated: false,
-  });
+  const [session, setSession] = useState<BrowserSession>({ authenticated: false });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const activity = isActivityLaunch();
+  const [attempt, retry] = useState(0);
   useEffect(() => {
-    // Remove only the obsolete browser credential, never persist IdP tokens.
     localStorage.removeItem('apiKey');
     let alive = true;
+    setLoading(true);
     const unsubscribe = subscribeAuthExpired(() => {
-      if (alive) {
-        setSession({ authenticated: false });
-        setError('Your session expired. Please sign in again.');
-      }
+      if (!alive) return;
+      setSession({ authenticated: false });
+      if (activity) retry((v) => v + 1);
+      else setError('Your session expired. Please sign in again.');
     });
-    api.auth
-      .session()
+    (activity ? startActivity() : api.auth.session())
       .then((value) => {
         if (alive) {
           setCsrfToken(value.csrfToken ?? null);
           setSession(value);
+          setError('');
         }
       })
       .catch(() => {
-        if (alive) setError('Unable to check your session. Please retry.');
+        if (alive)
+          setError(
+            activity
+              ? 'Discord authorization was cancelled or unavailable. Retry in your launch voice channel.'
+              : 'Unable to check your session. Please retry.'
+          );
       })
       .finally(() => {
         if (alive) setLoading(false);
@@ -45,25 +52,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       alive = false;
       unsubscribe();
     };
-  }, []);
+  }, [activity, attempt]);
   const login = useCallback(() => {
-    window.location.assign('/api/auth/login?returnTo=%2F');
-  }, []);
+    if (activity) retry((v) => v + 1);
+    else window.location.assign('/api/auth/login?returnTo=%2F');
+  }, [activity]);
   const logout = useCallback(async () => {
     try {
-      await api.auth.logout();
+      await api.auth.logout(activity);
       setCsrfToken(null);
       setSession({ authenticated: false });
       setError('');
     } catch {
       setError('Logout failed. Please retry.');
     }
-  }, []);
+  }, [activity]);
   return (
     <AuthContext.Provider
       value={{
         isAuthenticated: session.authenticated,
         loading,
+        activity,
         identity: session.identity,
         error,
         login,

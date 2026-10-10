@@ -2,7 +2,7 @@ import { useAuth } from '../hooks/useAuth';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 export function Login() {
-  const { login, error } = useAuth();
+  const { login, error, activity } = useAuth();
   const loginFailed = new URLSearchParams(window.location.search).has('authError');
   return (
     <div className="flex min-h-screen items-center justify-center p-4">
@@ -13,8 +13,9 @@ export function Login() {
         </CardHeader>
         <CardContent className="space-y-4">
           <p>
-            Sign in with Discord through Authentik. Access requires an explicit Button Gremlin
-            invitation and approval.
+            {activity
+              ? 'Join the launch voice channel, then retry Discord authorization.'
+              : 'Sign in with Discord through Authentik. Access requires an explicit Button Gremlin invitation and approval.'}
           </p>
           {(error || loginFailed) && (
             <p role="alert">
@@ -22,7 +23,7 @@ export function Login() {
             </p>
           )}
           <Button onClick={login} className="w-full">
-            Sign in with Discord
+            {activity ? 'Retry Discord authorization' : 'Sign in with Discord'}
           </Button>
         </CardContent>
       </Card>

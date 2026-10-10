@@ -14,8 +14,10 @@ export const api = {
       if (!response.ok) throw new Error('Unable to check session');
       return response.json();
     },
-    logout: async (): Promise<void> => {
-      const response = await apiFetch(`${API_BASE_URL}/auth/logout`, { method: 'POST' });
+    logout: async (activity = false): Promise<void> => {
+      const response = await apiFetch(`${API_BASE_URL}/${activity ? 'activity' : 'auth'}/logout`, {
+        method: 'POST',
+      });
       if (!response.ok) throw new Error('Logout failed; please retry');
     },
   },

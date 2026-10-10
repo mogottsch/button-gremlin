@@ -23,7 +23,7 @@ docker run -p 3000:3000 \
 
 Mount `/app/sounds` to persist uploaded sounds across container restarts. `BUTTON_GREMLIN_TAGS_FILE` defaults to legacy cwd `tags.json`; after an operator-owned atomic migration of existing tags, set it to `/app/sounds/metadata/tags.json` to persist global tags on the same mount. Sound metadata naming/listing is unchanged. The app does not automatically migrate or overwrite legacy tags.
 
-Web mode requires a dedicated Authentik provider, the existing invitation broker, and private Redis. See [SSO configuration, testing and revocation](docs/authentik-oidc.md). Bot-only mode (`WEB_ENABLED=false`) does not require these services. Node >=22.12 is required.
+Web mode requires a dedicated Authentik provider, the existing invitation broker, and private Redis. See [SSO configuration, testing and revocation](docs/authentik-oidc.md). Optional [Discord Activity automatic authentication and exact environment contract](docs/discord-activity.md) uses separate, launch-channel-scoped Discord sessions without changing standalone OIDC admission. Bot-only mode (`WEB_ENABLED=false`) does not require these services. Node >=22.12 is required.
 
 ### Development
 

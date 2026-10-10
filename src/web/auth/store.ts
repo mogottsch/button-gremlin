@@ -4,6 +4,7 @@ export const SESSION_SECONDS = 900;
 export const TRANSACTION_SECONDS = 600;
 export const randomToken = (): string => randomBytes(32).toString('base64url');
 export interface Identity {
+  activity?: { guildId: string; channelId: string };
   issuer: string;
   subject: string;
   name: string;

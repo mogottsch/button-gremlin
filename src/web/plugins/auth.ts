@@ -3,6 +3,18 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import type { AuthRuntime } from '../auth/runtime.js';
 import type { Session } from '../auth/store.js';
+import type { Client, VoiceBasedChannel } from 'discord.js';
+import {
+  ACTIVITY_COOKIE,
+  admittedChannel,
+  activityMutation,
+  ActivityDenied,
+} from '../activity/routes.js';
+declare module 'fastify' {
+  interface FastifyRequest {
+    activityChannel?: VoiceBasedChannel;
+  }
+}
 export function cookieName(runtime: AuthRuntime): string {
   return runtime.config.insecureTest ? 'bg_session' : '__Host-bg_session';
 }
@@ -30,7 +42,8 @@ export async function requestSession(
   runtime: AuthRuntime
 ): Promise<Session | null> {
   const token = strictCookies(request.headers.cookie)[cookieName(runtime)];
-  return token ? runtime.store.getSession(token) : null;
+  const session = token ? await runtime.store.getSession(token) : null;
+  return session?.identity.activity ? null : session;
 }
 export function validMutation(
   request: FastifyRequest,
@@ -45,7 +58,8 @@ export function validMutation(
   );
 }
 export function authGate(
-  runtime: AuthRuntime
+  runtime: AuthRuntime,
+  client: Client
 ): (request: FastifyRequest, reply: FastifyReply) => Promise<FastifyReply | undefined> {
   return async (request: FastifyRequest, reply: FastifyReply) => {
     const rawPath = new URL(request.url, 'http://internal').pathname;
@@ -71,6 +85,35 @@ export function authGate(
         return reply.code(401).send({ error: 'Unauthorized' });
       }
       const authorization = request.headers.authorization;
+      const activityToken = cookies[ACTIVITY_COOKIE];
+      if (activityToken) {
+        if (
+          !runtime.config.activity ||
+          authorization ||
+          cookies[cookieName(runtime)] ||
+          path.startsWith('/docs')
+        )
+          return reply.code(401).send({ error: 'Unauthorized' });
+        if (request.headers.origin && request.headers.origin !== runtime.config.activity.origin)
+          return reply.code(403).send({ error: 'Forbidden' });
+        const session = await runtime.store.getSession(activityToken);
+        if (!session?.identity.activity) return reply.code(401).send({ error: 'Unauthorized' });
+        if (
+          !['GET', 'HEAD', 'OPTIONS'].includes(request.method) &&
+          !activityMutation(request, session, runtime)
+        )
+          return reply.code(403).send({ error: 'Forbidden' });
+        try {
+          request.activityChannel = await admittedChannel(
+            client,
+            session.identity,
+            path.startsWith('/api/sounds') && !['GET', 'HEAD', 'OPTIONS'].includes(request.method)
+          );
+        } catch {
+          throw new ActivityDenied();
+        }
+        return;
+      }
       if (authorization) {
         if (
           cookies[cookieName(runtime)] ||
@@ -92,13 +135,16 @@ export function authGate(
       }
       const token = cookies[cookieName(runtime)];
       const session = token ? await runtime.store.getSession(token) : null;
-      if (!session) return reply.code(401).send({ error: 'Unauthorized' });
+      if (!session || session.identity.activity)
+        return reply.code(401).send({ error: 'Unauthorized' });
       if (
         !['GET', 'HEAD', 'OPTIONS'].includes(request.method) &&
         !validMutation(request, session, runtime)
       )
         return reply.code(403).send({ error: 'Forbidden' });
-    } catch {
+    } catch (error) {
+      if (error instanceof ActivityDenied)
+        return reply.code(403).send({ error: 'Activity admission denied' });
       return reply.code(503).send({ error: 'Authentication unavailable' });
     }
   };

@@ -102,13 +102,28 @@ async function findTargetVoiceChannel(
   throw new Error('No non-empty voice channels found to connect to');
 }
 
-export function getBotStatus(client: Client): {
+export function getBotStatus(
+  client: Client,
+  launchChannel?: VoiceBasedChannel
+): {
   online: boolean;
   connected: boolean;
   channelName?: string;
   guildName?: string;
 } {
   const online = client.isReady();
+  if (launchChannel) {
+    const connected =
+      !!client.user &&
+      launchChannel.guild.voiceStates.cache.get(client.user.id)?.channelId === launchChannel.id;
+    return {
+      online,
+      connected,
+      ...(connected
+        ? { channelName: launchChannel.name, guildName: launchChannel.guild.name }
+        : {}),
+    };
+  }
   let connected = false;
   let channelName: string | undefined;
   let guildName: string | undefined;
@@ -128,7 +143,18 @@ export function getBotStatus(client: Client): {
   return { online, connected, channelName, guildName };
 }
 
-export async function playSound(client: Client, soundPath: string): Promise<void> {
+export async function playSound(
+  client: Client,
+  soundPath: string,
+  launchChannel?: VoiceBasedChannel
+): Promise<void> {
+  if (launchChannel) {
+    const connection = getConnection(launchChannel.guild.id);
+    if (connection && connection.joinConfig.channelId !== launchChannel.id)
+      throw new Error('Bot is busy in another channel');
+    await playSoundInChannel(launchChannel, soundPath);
+    return;
+  }
   const botUser = client.user;
   if (!botUser) {
     throw new Error('Bot user not available');
@@ -150,7 +176,14 @@ export async function playSound(client: Client, soundPath: string): Promise<void
   logger.info({ guildId: targetChannel.guild.id, soundPath }, 'Audio file playback completed');
 }
 
-export function disconnectBot(client: Client): void {
+export function disconnectBot(client: Client, launchChannel?: VoiceBasedChannel): void {
+  if (launchChannel) {
+    const connection = getConnection(launchChannel.guild.id);
+    if (!connection || connection.joinConfig.channelId !== launchChannel.id)
+      throw new Error('Not connected to launch channel');
+    disconnectFromVoiceChannel(launchChannel.guild.id);
+    return;
+  }
   if (!client.user) {
     throw new Error('Bot user not available');
   }

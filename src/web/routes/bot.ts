@@ -23,9 +23,9 @@ export function createBotRoutes(
           security: [{ sessionAuth: [] }, { bearerAuth: [] }],
         },
       },
-      async (_request, reply) => {
+      async (request, reply) => {
         try {
-          const status = service.getBotStatus(client);
+          const status = service.getBotStatus(client, request.activityChannel);
           return status;
         } catch (error) {
           fastify.log.error(error);
@@ -59,9 +59,12 @@ export function createBotRoutes(
             return reply.status(404).send({ success: false, message: 'Sound not found' });
           }
 
-          void service.playSound(client, sound.path).catch((error) => {
-            fastify.log.error({ err: error, soundName }, 'Error playing sound in background');
-          });
+          const playing = service.playSound(client, sound.path, request.activityChannel);
+          if (request.activityChannel) await playing;
+          else
+            void playing.catch((error) => {
+              fastify.log.error({ err: error, soundName }, 'Error playing sound in background');
+            });
 
           return {
             success: true,
@@ -103,13 +106,13 @@ export function createBotRoutes(
           security: [{ sessionAuth: [] }, { bearerAuth: [] }],
         },
       },
-      async (_request, reply) => {
+      async (request, reply) => {
         try {
-          service.disconnectBot(client);
+          service.disconnectBot(client, request.activityChannel);
           return { success: true, message: 'Disconnected from voice channel' };
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Failed to disconnect';
-          const statusCode = message === 'Not connected to any voice channel' ? 400 : 500;
+          const statusCode = message.startsWith('Not connected to') ? 400 : 500;
 
           fastify.log.error(error);
           return reply.status(statusCode).send({ success: false, message });

@@ -19,12 +19,14 @@ import { authGate } from './plugins/auth.js';
 import { createSoundsRoutes } from './routes/sounds.js';
 import { createBotRoutes } from './routes/bot.js';
 import { createAuthRoutes } from './auth/routes.js';
+import { createActivityRoutes } from './activity/routes.js';
 import type { AuthRuntime } from './auth/runtime.js';
 export async function buildWebApp({
   client,
   authRuntime,
   logger = false,
   botService,
+  activityFetch,
   webDistPath = path.join(process.cwd(), 'web/dist'),
 }: {
   client: Client;
@@ -32,6 +34,7 @@ export async function buildWebApp({
   logger?: FastifyServerOptions['logger'];
   webDistPath?: string;
   botService?: typeof import('./services/bot-service.js');
+  activityFetch?: typeof fetch;
 }): Promise<FastifyInstance> {
   if (authRuntime.config.insecureTest && process.env['NODE_ENV'] === 'production')
     throw new Error('Insecure test mode forbidden');
@@ -45,7 +48,7 @@ export async function buildWebApp({
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
   await app.register(cookie);
-  app.addHook('onRequest', authGate(authRuntime));
+  app.addHook('onRequest', authGate(authRuntime, client));
   app.addHook('onRoute', (route) => {
     if (route.url.startsWith('/api/sounds') || route.url.startsWith('/api/bot')) {
       route.schema = {
@@ -82,6 +85,9 @@ export async function buildWebApp({
   });
   await app.register(swaggerUi, { routePrefix: '/docs' });
   await app.register(createAuthRoutes(authRuntime), { prefix: '/api/auth' });
+  await app.register(createActivityRoutes(authRuntime, client, activityFetch), {
+    prefix: '/api/activity',
+  });
   await app.register(createSoundsRoutes(), { prefix: '/api/sounds' });
   await app.register(createBotRoutes(client, botService), { prefix: '/api/bot' });
   if (existsSync(webDistPath))
