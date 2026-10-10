@@ -35,7 +35,7 @@ export function createSoundsRoutes(): FastifyPluginAsync {
           },
           tags: ['sounds'],
           description: 'List all sounds',
-          security: [{ bearerAuth: [] }],
+          security: [{ sessionAuth: [] }, { bearerAuth: [] }],
         },
       },
       async (_request, reply) => {
@@ -63,7 +63,7 @@ export function createSoundsRoutes(): FastifyPluginAsync {
           },
           tags: ['sounds'],
           description: 'Stream a sound file',
-          security: [{ bearerAuth: [] }],
+          security: [{ sessionAuth: [] }, { bearerAuth: [] }],
         },
       },
       async (request, reply) => {
@@ -97,7 +97,7 @@ export function createSoundsRoutes(): FastifyPluginAsync {
           },
           tags: ['sounds'],
           description: 'Upload a new sound',
-          security: [{ bearerAuth: [] }],
+          security: [{ sessionAuth: [] }, { bearerAuth: [] }],
         },
       },
       async (request, reply) => {
@@ -187,7 +187,7 @@ export function createSoundsRoutes(): FastifyPluginAsync {
           },
           tags: ['sounds'],
           description: 'Delete a sound',
-          security: [{ bearerAuth: [] }],
+          security: [{ sessionAuth: [] }, { bearerAuth: [] }],
         },
       },
       async (request, reply) => {
@@ -215,7 +215,7 @@ export function createSoundsRoutes(): FastifyPluginAsync {
           },
           tags: ['sounds'],
           description: 'Get all available tags',
-          security: [{ bearerAuth: [] }],
+          security: [{ sessionAuth: [] }, { bearerAuth: [] }],
         },
       },
       async (_request, reply) => {
@@ -243,7 +243,7 @@ export function createSoundsRoutes(): FastifyPluginAsync {
           },
           tags: ['sounds'],
           description: 'Create a new tag',
-          security: [{ bearerAuth: [] }],
+          security: [{ sessionAuth: [] }, { bearerAuth: [] }],
         },
       },
       async (request, reply) => {
@@ -283,7 +283,7 @@ export function createSoundsRoutes(): FastifyPluginAsync {
           },
           tags: ['sounds'],
           description: 'Delete a tag and remove it from all sounds',
-          security: [{ bearerAuth: [] }],
+          security: [{ sessionAuth: [] }, { bearerAuth: [] }],
         },
       },
       async (request, reply) => {
@@ -322,7 +322,7 @@ export function createSoundsRoutes(): FastifyPluginAsync {
           },
           tags: ['sounds'],
           description: 'Update sound metadata',
-          security: [{ bearerAuth: [] }],
+          security: [{ sessionAuth: [] }, { bearerAuth: [] }],
         },
       },
       async (request, reply) => {

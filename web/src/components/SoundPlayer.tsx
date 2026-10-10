@@ -21,6 +21,8 @@ export function SoundPlayer({ currentSound }: SoundPlayerProps) {
 
   useEffect(() => {
     if (currentSound && audioRef.current) {
+      const controller = new AbortController();
+      const audio = audioRef.current;
       const loadAudio = async () => {
         if (objectUrlRef.current) {
           URL.revokeObjectURL(objectUrlRef.current);
@@ -28,21 +30,8 @@ export function SoundPlayer({ currentSound }: SoundPlayerProps) {
         }
 
         try {
-          const apiKey = localStorage.getItem('apiKey');
-          if (!apiKey) return;
-
-          const response = await fetch(api.sounds.streamUrl(currentSound.name), {
-            headers: {
-              Authorization: `Bearer ${apiKey}`,
-            },
-          });
-
-          if (!response.ok) {
-            console.error('Failed to load audio:', response.statusText);
-            return;
-          }
-
-          const blob = await response.blob();
+          const blob = await api.sounds.stream(currentSound.name, controller.signal);
+          if (controller.signal.aborted) return;
           const url = URL.createObjectURL(blob);
           objectUrlRef.current = url;
           audioRef.current!.src = url;
@@ -56,6 +45,10 @@ export function SoundPlayer({ currentSound }: SoundPlayerProps) {
       void loadAudio();
 
       return () => {
+        controller.abort();
+        audio.pause();
+        audio.removeAttribute('src');
+        audio.load();
         if (objectUrlRef.current) {
           URL.revokeObjectURL(objectUrlRef.current);
           objectUrlRef.current = null;

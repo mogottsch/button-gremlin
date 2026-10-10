@@ -1,5 +1,5 @@
 import { readdir, stat, mkdir } from 'fs/promises';
-import { join, extname, basename } from 'path';
+import { join, extname, basename, dirname } from 'path';
 import { logger } from '../logger.js';
 import { readFile, writeFile } from 'fs/promises';
 import { validateFileName } from '../utils/filename.js';
@@ -7,7 +7,7 @@ import { validateFileName } from '../utils/filename.js';
 const SOUNDS_DIR = 'sounds';
 const ALLOWED_EXTENSIONS = ['.mp3', '.wav', '.ogg', '.m4a', '.flac', '.webm', '.opus'];
 const METADATA_DIR = join(SOUNDS_DIR, 'metadata');
-const TAGS_FILE = 'tags.json';
+const TAGS_FILE = process.env['BUTTON_GREMLIN_TAGS_FILE'] ?? 'tags.json';
 
 export interface SoundMetadata {
   displayName: string;
@@ -56,6 +56,7 @@ export async function getAllTags(): Promise<string[]> {
 
 export async function updateTags(tags: string[]): Promise<void> {
   const uniqueTags = Array.from(new Set(tags)).sort();
+  await mkdir(dirname(TAGS_FILE), { recursive: true });
   await writeFile(TAGS_FILE, JSON.stringify(uniqueTags, null, 2), 'utf-8');
 }
 
