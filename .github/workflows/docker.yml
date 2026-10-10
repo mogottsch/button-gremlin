@@ -38,6 +38,12 @@ jobs:
             pnpm-lock.yaml
             web/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile && pnpm --dir web install --frozen-lockfile
+      - name: Install voice test audio dependency
+        # WAV playback uses the real FFmpeg pipeline, as in the Docker runtime.
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends ffmpeg
+          ffmpeg -version
       - run: pnpm test && pnpm --dir web test && pnpm typecheck && pnpm lint && pnpm --dir web lint && pnpm build:all
         env:
           TEST_SCRATCH_DIR: ${{ runner.temp }}/bg-auth
