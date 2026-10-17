@@ -3,8 +3,57 @@ import assert from 'node:assert/strict';
 import { fork } from 'node:child_process';
 import { createClient } from 'redis';
 import { RedisAuthStore } from '../auth/store.ts';
+import { randomToken } from '../auth/store.ts';
 const url = process.env.REDIS_TEST_URL;
 const secret = 'worker-fixture-secret'.repeat(4);
+test(
+  'independent Redis clients serialize guarded issuance against logout and fail closed on lost browser epoch',
+  { skip: !url },
+  async () => {
+    const secret = randomToken();
+    const a = await RedisAuthStore.connect(url, secret);
+    const b = await RedisAuthStore.connect(url, secret);
+    const raw = createClient({ url });
+    await raw.connect();
+    try {
+      for (let i = 0; i < 10; i++) {
+        const browser = randomToken();
+        const state = randomToken();
+        const binding = randomToken();
+        const browserGeneration = await a.browserGeneration(browser);
+        await a.putTransaction(state, {
+          phase: 'probe',
+          browser,
+          browserGeneration,
+          binding,
+          nonce: randomToken(),
+          verifier: randomToken(),
+          returnTo: '/',
+        });
+        const guard = await b.takeTransaction(state, binding);
+        const identity = { issuer: 'https://fixture/', subject: randomToken(), name: 'Fixture' };
+        const first = await a.createSession(identity, guard);
+        const outcomes = await Promise.allSettled([
+          a.createSession(identity, guard),
+          b.logoutSession(first, browser),
+        ]);
+        assert.equal(await a.getSession(first), null);
+        if (outcomes[0].status === 'fulfilled')
+          assert.equal(await b.getSession(outcomes[0].value), null);
+        await assert.rejects(() => b.createSession(identity, guard), /invalidated/);
+        const next = await a.browserGeneration(browser);
+        assert.notEqual(next, browserGeneration);
+        assert.equal(await b.validBrowserGeneration(browser, browserGeneration), false);
+        await raw.del(a.key('browser', browser));
+        assert.equal(await b.validBrowserGeneration(browser, next), false);
+      }
+    } finally {
+      await raw.close();
+      await a.close();
+      await b.close();
+    }
+  }
+);
 function worker(payload) {
   return new Promise((resolve, reject) => {
     const child = fork(new URL('./redis-worker.mjs', import.meta.url), [], {
