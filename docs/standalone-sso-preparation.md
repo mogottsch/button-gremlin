@@ -97,17 +97,37 @@ separate; no universal media/native revocation promise is made.
 
 Exact Origin plus existing CSRF are still mandatory. Logout atomically deletes the
 session and invalidates its browser epoch (and the current browser binding when they
-differ), then clears owned pending cookies. Epoch checks cover new issuance AND lookup
-of already-issued sibling sessions; a callback finishing before deletion is invalidated,
-a callback finishing afterward cannot recreate the old grant. A fresh login gets a
-new random epoch; it never revives a stale callback. Existing separate-worker session
-and subject-generation checks remain, with additional independent-client races.
+differ), then clears owned pending cookies. Existing separate-worker session and
+subject-generation checks remain. Epoch checks alone cannot cancel an initially
+cookieless entry whose different browser marker has not yet reached the browser.
+
+BG-G1 adds `__Host-bg_logout`, a random Secure/HttpOnly/host-only/Lax cookie at `/`,
+fixed 30d retention, written ONLY by successful logout. No entry or callback response
+ever clears/replaces it, even an old explicit entry/success. Transactions snapshot
+its value and callbacks compare it before token exchange or broker fallback. Issued
+standalone sessions snapshot it too; both session lookup and protected HTTP require
+an exact match. This blocks delayed success headers and in-flight unseen exchanges
+even when their earlier request could not see the new marker. Separate Activity and
+other browsers' valid sessions are not revoked. This is not subject-wide logout.
+
+Without a valid local session, automatic entry with a new logout marker lands inert.
+Only the explicit Sign in button adds `explicit=1`; the backend requires exact
+`Sec-Fetch-Site: same-origin` (missing/cross-site/same-site metadata fails closed).
+The transaction binds that intent and marker through fresh probe/fallback. Only
+successful guarded OIDC session issuance atomically records Redis resumption for
+that marker. Failed/denied explicit entry does not reenable automatic login. After
+successful explicit authentication, automatic SSO re-establishment is available
+again when the fixed900s local session expires. The resumption record is shared
+across workers, expires after 30d+1500s, does not slide on reads, and is NOT identity,
+admission, an app session or a refresh grant. Missing/outage state fails closed.
+Another logout uses a fresh random marker and needs fresh explicit authentication.
 
 The standalone UI suppresses automatic entry BEFORE sending logout (racing401 safety),
 lands on `/?loggedOut=1`, and keeps a non-secret browser-local suppression marker for
 reload/back/new tabs. Restored back-forward-cache pages revalidate. A failed logout
 shows an error and retains access; it does NOT claim success or clear its valid session.
-Explicit Sign in clears suppression and can reuse the still-live Authentik identity.
+Explicit Sign in clears UI suppression, not the backend logout-only cookie, and can
+reuse the still-live Authentik identity through a new validated authorization.
 This is app-local/browser-epoch logout, NOT logout-everywhere or Discord deauthorization.
 
 ## Separate Discord Activity boundary — unchanged
@@ -159,12 +179,14 @@ Only the feature branch is pushed. Bot, voice, audio and runtime source are unto
 Before PR publication, inspect current workflow triggers and runner availability; the
 legacy workflow uses hosted ubuntu-latest on PRs and push=false for its container job.
 Do not silently use a forbidden route, publish images or waive required checks.
-The preparation head uses GitHub's documented `[skip ci]` publication guard to avoid
-triggering that unauthorized hosted workflow when the draft PR opens. This is NOT a
-check waiver or green CI: exact-head CI remains pending/blocked until F supplies an
-existing authorized PRIVATE build/test-only route (with publishing disabled). No runner
-registration or infrastructure was added. Independent review/release must not treat
-local green fixtures or skipped hosted checks as completed remote CI.
+The canonical preparation brief explicitly permits this already-public personal app's
+EXISTING hosted pull_request verify+container-build route, with image push=false and
+no deployment/writeback. The initial `[skip ci]` hold was superseded by that scoped
+clarification; corrected heads run normal exact-head CI with no waiver or runner
+change. This exception does not move any infrastructure CI off private ARC.
+Native audio compilation inputs are unchanged; local preparation reuses installed
+dependencies and previous native build evidence while actual new-head CI still runs
+the full existing repository workflow. Green checks are not independent G approval.
 
 Eventual order ONLY after fresh Moritz authority and G exact-head review: resolve C1-C4
 and broker C3 correction; coordinate reviewed broker+F generation/source config; prepare

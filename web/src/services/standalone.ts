@@ -30,7 +30,9 @@ export function standaloneLogin(explicit = false): boolean {
   destination.searchParams.delete('authError');
   destination.searchParams.delete('loggedOut');
   window.location.assign(
-    '/api/auth/login?returnTo=' + encodeURIComponent(destination.pathname + destination.search)
+    '/api/auth/login?returnTo=' +
+      encodeURIComponent(destination.pathname + destination.search) +
+      (explicit ? '&explicit=1' : '')
   );
   return true;
 }

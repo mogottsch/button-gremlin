@@ -39,6 +39,7 @@ test('logout reload/back and terminal error stay inert; only explicit sign-in re
     assert.equal(calls.length, 1);
     assert.ok(!calls[0].includes('authError'));
     assert.ok(!calls[0].includes('loggedOut'));
+    assert.equal(calls[0], '/api/auth/login?returnTo=%2F%3Fview%3Dmine&explicit=1');
   }
   const calls = setup();
   suppressStandalone();

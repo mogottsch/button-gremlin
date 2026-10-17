@@ -14,6 +14,8 @@ export interface Identity {
   avatarUrl?: string;
 }
 export interface Transaction {
+  logoutMarker?: string;
+  explicit?: boolean;
   startedAt?: number;
   phase?: 'probe' | 'fallback';
   browser?: string;
@@ -24,6 +26,7 @@ export interface Transaction {
   returnTo: string;
 }
 export interface Session {
+  logoutMarker?: string;
   browser?: string;
   browserGeneration?: string;
   identity: Identity;
@@ -36,6 +39,7 @@ export interface AuthStore {
   takeTransaction(state: string, binding: string): Promise<Transaction | null>;
   browserGeneration(browser: string): Promise<string>;
   validBrowserGeneration(browser: string, generation: string): Promise<boolean>;
+  resumedAfterLogout(marker: string): Promise<boolean>;
   createSession(identity: Identity, guard?: Transaction): Promise<string>;
   getSession(token: string): Promise<Session | null>;
   deleteSession(token: string): Promise<void>;
@@ -121,19 +125,21 @@ export class RedisAuthStore implements AuthStore {
       csrfToken: randomToken(),
       expiresAt: Date.now() + SESSION_SECONDS * 1000,
       generation: '',
+      ...(guard?.logoutMarker ? { logoutMarker: guard.logoutMarker } : {}),
       ...(guard ? { browser: guard.browser, browserGeneration: guard.browserGeneration } : {}),
     };
     // Generation initialization, browser epoch comparison and issuance are atomic.
     const created = await this.client
       .withCommandOptions({ timeout: 5000 })
       .eval(
-        "if ARGV[4]~='' then if redis.call('GET',KEYS[3])~=ARGV[4] then return 0 end; local revoked=redis.call('GET',KEYS[4]); if revoked and tonumber(ARGV[5])<=tonumber(revoked) then return 0 end end; redis.call('SET',KEYS[1],ARGV[1],'NX'); local s=cjson.decode(ARGV[2]); s.generation=redis.call('GET',KEYS[1]); redis.call('SET',KEYS[2],cjson.encode(s),'EX',ARGV[3]); return 1",
+        "if ARGV[4]~='' then if redis.call('GET',KEYS[3])~=ARGV[4] then return 0 end; local revoked=redis.call('GET',KEYS[4]); if revoked and tonumber(ARGV[5])<=tonumber(revoked) then return 0 end end; if ARGV[6]~='' and ARGV[7]~='1' and redis.call('GET',KEYS[5])~='1' then return 0 end; redis.call('SET',KEYS[1],ARGV[1],'NX'); local s=cjson.decode(ARGV[2]); s.generation=redis.call('GET',KEYS[1]); redis.call('SET',KEYS[2],cjson.encode(s),'EX',ARGV[3]); if ARGV[6]~='' and ARGV[7]=='1' then redis.call('SET',KEYS[5],'1','EX',ARGV[8]) end; return 1",
         {
           keys: [
             this.subjectKey(identity),
             this.key('session', token),
             this.key('browser', guard?.browser ?? ''),
             this.key('revokedAt', JSON.stringify([identity.issuer, identity.subject])),
+            this.key('resumed', guard?.logoutMarker ?? ''),
           ],
           arguments: [
             initial,
@@ -141,11 +147,20 @@ export class RedisAuthStore implements AuthStore {
             String(SESSION_SECONDS),
             guard?.browserGeneration ?? '',
             String(guard?.startedAt ?? 0),
+            guard?.logoutMarker ?? '',
+            guard?.explicit ? '1' : '0',
+            String(BROWSER_SECONDS),
           ],
         }
       );
     if (!created) throw new LoginInvalidated('Login invalidated');
     return token;
+  }
+  async resumedAfterLogout(marker: string): Promise<boolean> {
+    return (
+      (await this.client.withCommandOptions({ timeout: 5000 }).get(this.key('resumed', marker))) ===
+      '1'
+    );
   }
   async getSession(token: string): Promise<Session | null> {
     if (!/^[A-Za-z0-9_-]{43}$/.test(token)) return null;

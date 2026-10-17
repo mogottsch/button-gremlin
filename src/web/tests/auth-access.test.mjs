@@ -47,6 +47,48 @@ test(
     }
   }
 );
+test(
+  'standalone logout-only marker is host-only secure HttpOnly and never emitted on forbidden logout',
+  { skip: !url },
+  async () => {
+    const { app, store, config } = await fixture();
+    try {
+      const token = await store.createSession({ issuer: config.issuer, subject: 's', name: 'F' });
+      const cookie = '__Host-bg_session=' + token;
+      const session = await store.getSession(token);
+      const forbidden = await app.inject({
+        method: 'POST',
+        url: '/api/auth/logout',
+        headers: {
+          cookie,
+          origin: 'https://evil.test',
+          'x-csrf-token': session.csrfToken,
+        },
+      });
+      assert.equal(forbidden.statusCode, 403);
+      assert.equal(forbidden.cookies.length, 0);
+      const out = await app.inject({
+        method: 'POST',
+        url: '/api/auth/logout',
+        headers: {
+          cookie,
+          origin: config.origin,
+          'x-csrf-token': session.csrfToken,
+        },
+      });
+      assert.equal(out.statusCode, 200);
+      const marker = out.headers['set-cookie'].find((c) => c.startsWith('__Host-bg_logout='));
+      assert.ok(marker);
+      for (const flag of ['Secure', 'HttpOnly', 'SameSite=Lax', 'Path=/;', 'Max-Age=2592000'])
+        assert.ok(marker.includes(flag), flag);
+      assert.ok(!marker.includes('Domain='));
+      assert.ok(!marker.includes('Partitioned'));
+    } finally {
+      await app.close();
+      await store.close();
+    }
+  }
+);
 async function fixture(options = {}) {
   const config = {
     origin: 'https://button-gremlin.moket-home.de',

@@ -10,7 +10,13 @@ import {
   LoginInvalidated,
   type Transaction,
 } from './store.js';
-import { cookieName, strictCookies, requestSession, validMutation } from '../plugins/auth.js';
+import {
+  cookieName,
+  logoutCookieName,
+  strictCookies,
+  requestSession,
+  validMutation,
+} from '../plugins/auth.js';
 export const txCookieName = (state: string, insecure: boolean): string =>
   (insecure ? 'bg_oidc_tx_' : '__Secure-bg_oidc_tx_') +
   createHash('sha256').update(state).digest('hex').slice(0, 24);
@@ -52,8 +58,17 @@ export function createAuthRoutes(runtime: AuthRuntime): FastifyPluginAsync {
         if (!(await store.rateLimit('login:' + request.ip, 30, 60)))
           return reply.code(429).send({ error: 'Too many requests' });
         const query = new URL(request.url, config.origin).searchParams;
-        if ([...query.keys()].some((k) => k !== 'returnTo') || query.getAll('returnTo').length > 1)
+        if (
+          [...query.keys()].some((k) => !['returnTo', 'explicit'].includes(k)) ||
+          query.getAll('returnTo').length > 1 ||
+          query.getAll('explicit').length > 1 ||
+          (query.has('explicit') && query.get('explicit') !== '1')
+        )
           return reply.code(400).send({ error: 'Invalid authentication request' });
+        const explicit = query.get('explicit') === '1';
+        // A third-party top-level navigation must not undo local logout.
+        if (explicit && request.headers['sec-fetch-site'] !== 'same-origin')
+          return reply.code(403).send({ error: 'Forbidden' });
         let returnTo: string;
         try {
           returnTo = safeReturnTo(query.get('returnTo') ?? '/', config.origin);
@@ -62,6 +77,11 @@ export function createAuthRoutes(runtime: AuthRuntime): FastifyPluginAsync {
         }
         if (await requestSession(request, runtime)) return reply.redirect(config.origin + returnTo);
         const cookies = strictCookies(request.headers.cookie);
+        const logoutMarker = cookies[logoutCookieName(runtime)];
+        if (logoutMarker !== undefined && !validToken(logoutMarker))
+          return reply.code(400).send({ error: 'Invalid authentication request' });
+        if (logoutMarker && !explicit && !(await store.resumedAfterLogout(logoutMarker)))
+          return reply.redirect(config.origin + '/?loggedOut=1');
         const prefix = config.insecureTest ? 'bg_oidc_tx_' : '__Secure-bg_oidc_tx_';
         if (Object.keys(cookies).filter((k) => k.startsWith(prefix)).length >= 8)
           return reply.code(429).send({ error: 'Too many pending logins' });
@@ -72,6 +92,8 @@ export function createAuthRoutes(runtime: AuthRuntime): FastifyPluginAsync {
         reply.setCookie(name, browser, { ...cookieOptions, maxAge: 30 * 86400 });
         return await begin(reply, {
           phase: 'probe',
+          logoutMarker,
+          explicit,
           browser,
           browserGeneration,
           binding: randomToken(),
@@ -117,6 +139,9 @@ export function createAuthRoutes(runtime: AuthRuntime): FastifyPluginAsync {
         // Drop stale browser state even when Redis has already expired/consumed it.
         reply.clearCookie(name, { ...cookieOptions, path: TRANSACTION_COOKIE_PATH });
         if (!tx) return failure();
+        if (tx.logoutMarker !== cookies[logoutCookieName(runtime)]) return failure();
+        if (tx.logoutMarker && !tx.explicit && !(await store.resumedAfterLogout(tx.logoutMarker)))
+          return failure();
         if (
           !tx.browser ||
           cookies[browserCookieName(config.insecureTest)] !== tx.browser ||
@@ -186,6 +211,13 @@ export function createAuthRoutes(runtime: AuthRuntime): FastifyPluginAsync {
         if (!token) return reply.code(401).send({ error: 'Unauthorized' });
         const cookies = strictCookies(request.headers.cookie);
         await store.logoutSession(token, cookies[browserCookieName(config.insecureTest)]);
+        // Only logout writes this cookie. Neither old entry nor success responses
+        // may clear it: they could arrive after this response, even from a tab
+        // whose initially-cookieless browser epoch was never visible here.
+        reply.setCookie(logoutCookieName(runtime), randomToken(), {
+          ...cookieOptions,
+          maxAge: 30 * 86400,
+        });
         reply.clearCookie(cookieName(runtime), cookieOptions);
         const prefix = config.insecureTest ? 'bg_oidc_tx_' : '__Secure-bg_oidc_tx_';
         for (const name of Object.keys(cookies).filter((k) => k.startsWith(prefix)))
