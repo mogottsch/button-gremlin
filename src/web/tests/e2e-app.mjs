@@ -110,6 +110,7 @@ control.post('/revoke', async () => {
   return { ok: true };
 });
 control.get('/bot-calls', async () => botCalls);
+control.get('/auth-counts', async () => provider.requests);
 control.post('/activity-revoke', async () => {
   await store.revokeSubject('https://discord.com', '333333333333333333');
   return { ok: true };

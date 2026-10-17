@@ -61,12 +61,14 @@ export class OidcRuntime {
       nonce: tx.nonce,
       code_challenge: await oidc.calculatePKCECodeChallenge(tx.verifier),
       code_challenge_method: 'S256',
+      ...(tx.phase === 'probe' ? { prompt: 'none' } : {}),
     });
     const endpoint = this.client.serverMetadata().authorization_endpoint;
     if (!endpoint) throw new Error('Missing endpoint');
     const expected = new URL(endpoint);
     if (authorization.origin !== expected.origin || authorization.pathname !== expected.pathname)
       throw new Error('Unsafe authorization endpoint');
+    if (tx.phase === 'probe') return authorization.href;
     const broker = new URL('/login', this.config.brokerBase);
     // Broker admits only a path on the configured Authentik origin; never /join.
     broker.searchParams.set('return_to', authorization.pathname + authorization.search);

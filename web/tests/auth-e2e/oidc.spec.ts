@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 async function login(page: import('@playwright/test').Page) {
-  await page.goto('/');
+  await page.goto('/?loggedOut=1');
   await page.getByRole('button', { name: 'Sign in with Discord' }).click();
   await expect(page.getByRole('button', { name: 'Logout' })).toBeVisible();
 }
@@ -8,7 +8,7 @@ test('Chromium sends outstanding transaction cookies on login and rejects the ni
   page,
   context,
 }) => {
-  await page.goto('/');
+  await page.goto('/?loggedOut=1');
   // Real Chromium fetch stores Set-Cookie but stops before the identity redirect.
   for (let i = 0; i < 8; i++) {
     expect(
@@ -33,7 +33,7 @@ test('broker login reload cookie audio without key, logout and replay denial', a
   context,
   request,
 }) => {
-  await page.goto('/');
+  await page.goto('/?loggedOut=1');
   await page.evaluate(() => localStorage.setItem('apiKey', 'obsolete-fixture-key'));
   await page.reload();
   await expect(page.getByRole('button', { name: 'Sign in with Discord' })).toBeVisible();
@@ -70,6 +70,10 @@ test('broker login reload cookie audio without key, logout and replay denial', a
   await page.unroute('**/api/auth/logout');
   await page.getByRole('button', { name: 'Logout' }).click();
   await expect(page.getByRole('button', { name: 'Sign in with Discord' })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole('button', { name: 'Sign in with Discord' })).toBeVisible();
+  await page.goto('/');
+  await expect(page.getByRole('button', { name: 'Sign in with Discord' })).toBeVisible();
   await expect(page.locator('audio')).toHaveCount(0);
   expect(
     (await request.get('/api/sounds', { headers: { Cookie: `bg_session=${old?.value}` } })).status()
@@ -78,16 +82,19 @@ test('broker login reload cookie audio without key, logout and replay denial', a
 });
 test('zero-entitlement denial, browser revocation, fresh login', async ({ page, request }) => {
   await request.post('http://127.0.0.1:13001/mode/denied');
-  await page.goto('/');
+  await page.goto('/?loggedOut=1');
   await page.getByRole('button', { name: 'Sign in with Discord' }).click();
   await expect(page.getByRole('alert')).toContainText('access was denied');
   expect((await request.get('/api/auth/session')).status()).toBe(200);
   expect(await page.evaluate(() => document.cookie)).not.toContain('bg_session');
   await request.post('http://127.0.0.1:13001/mode/success');
   await login(page);
+  await request.post('http://127.0.0.1:13001/mode/denied');
   await request.post('http://127.0.0.1:13001/revoke');
   await page.reload();
   await expect(page.getByRole('button', { name: 'Sign in with Discord' })).toBeVisible();
+  await expect(page.getByRole('alert')).toContainText('access was denied');
+  await request.post('http://127.0.0.1:13001/mode/success');
   await login(page);
 });
 test('sound metadata, upload/delete and cookie mutation CSRF in real browser', async ({
