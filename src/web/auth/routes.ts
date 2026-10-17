@@ -70,7 +70,7 @@ export function createAuthRoutes(runtime: AuthRuntime): FastifyPluginAsync {
         const browserGeneration = await store.browserGeneration(browser);
         // This marker is only a logout epoch binding, never an authentication grant.
         reply.setCookie(name, browser, { ...cookieOptions, maxAge: 30 * 86400 });
-        return begin(reply, {
+        return await begin(reply, {
           phase: 'probe',
           browser,
           browserGeneration,
@@ -132,7 +132,9 @@ export function createAuthRoutes(runtime: AuthRuntime): FastifyPluginAsync {
           !params.has('code') &&
           tx.phase === 'probe'
         ) {
-          return begin(reply, {
+          if (await requestSession(request, runtime))
+            return reply.redirect(config.origin + safeReturnTo(tx.returnTo, config.origin));
+          return await begin(reply, {
             ...tx,
             phase: 'fallback',
             binding: randomToken(),

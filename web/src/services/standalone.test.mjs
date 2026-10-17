@@ -56,3 +56,13 @@ test('unavailable durable storage never triggers automatic login loops', () => {
   assert.equal(standaloneLogin(), false);
   assert.equal(standaloneLogin(true), true);
 });
+test('quota failure during logout suppression still blocks racing401 in memory', () => {
+  const calls = setup();
+  globalThis.localStorage.setItem = () => {
+    throw Error('QuotaExceededError');
+  };
+  suppressStandalone();
+  assert.equal(standaloneLogin(), false);
+  assert.equal(calls.length, 0);
+  assert.equal(standaloneLogin(true), true);
+});

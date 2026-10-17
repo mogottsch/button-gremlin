@@ -6,6 +6,30 @@ import { OidcRuntime } from '../auth/oidc.ts';
 import { fakeProvider } from './fake-oidc-server.mjs';
 import { createClient } from 'redis';
 const redis = process.env.REDIS_TEST_URL;
+test(
+  'a probe returning after another tab signs in reuses local session instead of broker',
+  { skip: !redis },
+  async () => {
+    const f = await fixture();
+    try {
+      const pending = await f.start();
+      const token = await f.store.createSession({
+        issuer: f.p.issuer,
+        subject: 'local',
+        name: 'Local',
+      });
+      const cb = new URL(f.config.redirectUri);
+      cb.searchParams.set('state', pending.url.searchParams.get('state'));
+      cb.searchParams.set('error', 'login_required');
+      const result = await f.callback(cb, merge(pending.cookie, 'bg_session=' + token));
+      assert.equal(result.headers.location, f.config.origin + '/?view=mine');
+      assert.equal(f.p.requests.broker, 0);
+      assert.ok(!cookies(result).includes('bg_session='));
+    } finally {
+      await f.close();
+    }
+  }
+);
 const cookies = (r) =>
   r.cookies
     .filter((c) => c.value)

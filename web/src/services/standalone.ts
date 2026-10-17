@@ -1,16 +1,21 @@
 // Non-secret UI suppression only; never used as an authorization decision.
 const ATTEMPT = 'bg.sso.attempt';
 const LOGGED_OUT = 'bg.sso.loggedOut';
+let logoutPending = false;
 export function standaloneLogin(explicit = false): boolean {
+  if (explicit) logoutPending = false;
+  else if (logoutPending) return false;
   const query = new URLSearchParams(window.location.search);
   try {
     if (explicit) {
       localStorage.removeItem(LOGGED_OUT);
+      sessionStorage.removeItem(LOGGED_OUT);
       sessionStorage.removeItem(ATTEMPT);
     } else if (
       query.has('authError') ||
       query.has('loggedOut') ||
       localStorage.getItem(LOGGED_OUT) ||
+      sessionStorage.getItem(LOGGED_OUT) ||
       sessionStorage.getItem(ATTEMPT)
     ) {
       return false;
@@ -37,9 +42,16 @@ export function standaloneAuthenticated(): void {
   }
 }
 export function suppressStandalone(): void {
+  // Synchronous protection even when quota blocks persistence during the POST.
+  logoutPending = true;
   try {
     localStorage.setItem(LOGGED_OUT, '1');
   } catch {
     /* The logged-out landing URL is also inert. */
+  }
+  try {
+    sessionStorage.setItem(LOGGED_OUT, '1');
+  } catch {
+    /* In-memory protection still covers racing requests in this document. */
   }
 }

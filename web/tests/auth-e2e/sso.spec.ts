@@ -41,11 +41,16 @@ test('missing local cookie and protected 401 re-establish through current author
 }) => {
   await page.goto('/');
   await expect(page.getByRole('button', { name: 'Logout' })).toBeVisible();
+  await expect(page.getByText('Fixture Sound', { exact: true })).toBeVisible();
   await context.clearCookies({ name: 'bg_session' });
   const before = await counts(request);
-  await page.evaluate(async () => {
-    await fetch('/api/sounds');
-  });
+  // Exercise the application's apiFetch401 subscriber, not bare window.fetch.
+  await page
+    .locator('.group')
+    .filter({ hasText: 'Fixture Sound' })
+    .locator('button')
+    .first()
+    .click();
   await expect.poll(async () => (await counts(request)).authorize).toBe(before.authorize + 1);
   await expect(page.getByRole('button', { name: 'Logout' })).toBeVisible();
   const after = await counts(request);
