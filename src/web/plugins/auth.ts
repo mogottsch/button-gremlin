@@ -18,6 +18,9 @@ declare module 'fastify' {
 export function cookieName(runtime: AuthRuntime): string {
   return runtime.config.insecureTest ? 'bg_session' : '__Host-bg_session';
 }
+export function logoutCookieName(runtime: AuthRuntime): string {
+  return runtime.config.insecureTest ? 'bg_logout' : '__Host-bg_logout';
+}
 export function equalSecret(a: string, b: string): boolean {
   return timingSafeEqual(
     createHash('sha256').update(a).digest(),
@@ -41,9 +44,12 @@ export async function requestSession(
   request: FastifyRequest,
   runtime: AuthRuntime
 ): Promise<Session | null> {
-  const token = strictCookies(request.headers.cookie)[cookieName(runtime)];
+  const cookies = strictCookies(request.headers.cookie);
+  const token = cookies[cookieName(runtime)];
   const session = token ? await runtime.store.getSession(token) : null;
-  return session?.identity.activity ? null : session;
+  if (session?.identity.activity || session?.logoutMarker !== cookies[logoutCookieName(runtime)])
+    return null;
+  return session;
 }
 export function validMutation(
   request: FastifyRequest,
@@ -133,8 +139,7 @@ export function authGate(
         }
         return;
       }
-      const token = cookies[cookieName(runtime)];
-      const session = token ? await runtime.store.getSession(token) : null;
+      const session = await requestSession(request, runtime);
       if (!session || session.identity.activity)
         return reply.code(401).send({ error: 'Unauthorized' });
       if (

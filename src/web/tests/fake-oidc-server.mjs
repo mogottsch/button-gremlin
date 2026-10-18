@@ -10,6 +10,8 @@ export async function fakeProvider() {
   let issuer;
   let mode = 'success';
   let endpoints = {};
+  const requests = { authorize: 0, broker: 0, token: 0, silent: 0 };
+  let tokenBarrier;
   app.get('/.well-known/openid-configuration', async (_req, reply) => {
     if (mode === 'discovery-error') return reply.code(503).send({ error: 'fixture' });
     return {
@@ -25,17 +27,22 @@ export async function fakeProvider() {
     };
   });
   app.get('/jwks', async () => ({ keys: [jwk] }));
-  app.get('/login', async (req, reply) =>
-    reply.redirect(new URL(req.query.return_to, issuer).href)
-  );
+  app.get('/login', async (req, reply) => {
+    requests.broker++;
+    return reply.redirect(new URL(req.query.return_to, issuer).href);
+  });
   app.get('/authorize', async (req, reply) => {
     const q = req.query;
+    requests.authorize++;
+    if (q.prompt === 'none') requests.silent++;
     assert.equal(q.scope, 'openid profile');
     assert.equal(q.code_challenge_method, 'S256');
     assert.equal(q.client_id, 'bg');
     const callback = new URL(q.redirect_uri);
     callback.searchParams.set('state', q.state);
-    if (mode === 'denied') {
+    if (mode === 'cold' && q.prompt === 'none') {
+      callback.searchParams.set('error', 'login_required');
+    } else if (mode === 'denied') {
       callback.searchParams.set('error', 'access_denied');
     } else {
       const code = randomUUID();
@@ -45,6 +52,8 @@ export async function fakeProvider() {
     return reply.redirect(callback.href);
   });
   app.post('/token', async (req, reply) => {
+    requests.token++;
+    if (tokenBarrier) await tokenBarrier;
     assert.equal(
       req.headers.authorization,
       'Basic ' + Buffer.from('bg:fixture').toString('base64')
@@ -99,6 +108,17 @@ export async function fakeProvider() {
   return {
     app,
     issuer,
+    requests,
+    pauseToken: () => {
+      let release;
+      tokenBarrier = new Promise((resolve) => {
+        release = resolve;
+      });
+      return () => {
+        tokenBarrier = undefined;
+        release();
+      };
+    },
     setMode: (v) => {
       mode = v;
     },

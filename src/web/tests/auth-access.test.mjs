@@ -47,6 +47,48 @@ test(
     }
   }
 );
+test(
+  'standalone logout-only marker is host-only secure HttpOnly and never emitted on forbidden logout',
+  { skip: !url },
+  async () => {
+    const { app, store, config } = await fixture();
+    try {
+      const token = await store.createSession({ issuer: config.issuer, subject: 's', name: 'F' });
+      const cookie = '__Host-bg_session=' + token;
+      const session = await store.getSession(token);
+      const forbidden = await app.inject({
+        method: 'POST',
+        url: '/api/auth/logout',
+        headers: {
+          cookie,
+          origin: 'https://evil.test',
+          'x-csrf-token': session.csrfToken,
+        },
+      });
+      assert.equal(forbidden.statusCode, 403);
+      assert.equal(forbidden.cookies.length, 0);
+      const out = await app.inject({
+        method: 'POST',
+        url: '/api/auth/logout',
+        headers: {
+          cookie,
+          origin: config.origin,
+          'x-csrf-token': session.csrfToken,
+        },
+      });
+      assert.equal(out.statusCode, 200);
+      const marker = out.headers['set-cookie'].find((c) => c.startsWith('__Host-bg_logout='));
+      assert.ok(marker);
+      for (const flag of ['Secure', 'HttpOnly', 'SameSite=Lax', 'Path=/;', 'Max-Age=2592000'])
+        assert.ok(marker.includes(flag), flag);
+      assert.ok(!marker.includes('Domain='));
+      assert.ok(!marker.includes('Partitioned'));
+    } finally {
+      await app.close();
+      await store.close();
+    }
+  }
+);
 async function fixture(options = {}) {
   const config = {
     origin: 'https://button-gremlin.moket-home.de',
@@ -151,7 +193,15 @@ test(
     try {
       const login = await app.inject({ url: '/api/auth/login?returnTo=%2F' });
       assert.equal(login.statusCode, 302);
-      const txCookie = login.headers['set-cookie'];
+      const txCookie = login.headers['set-cookie'].find((c) =>
+        c.startsWith('__Secure-bg_oidc_tx_')
+      );
+      const browserCookie = login.headers['set-cookie'].find((c) =>
+        c.startsWith('__Host-bg_browser=')
+      );
+      for (const flag of ['Secure', 'HttpOnly', 'SameSite=Lax', 'Path=/', 'Max-Age=2592000'])
+        assert.ok(browserCookie.includes(flag));
+      assert.ok(!browserCookie.includes('Domain='));
       for (const flag of ['Secure', 'HttpOnly', 'SameSite=Lax', 'Path=/api/auth;', 'Max-Age=600'])
         assert.ok(txCookie.includes(flag));
       assert.ok(!txCookie.includes('Domain='));
@@ -164,9 +214,14 @@ test(
       for (const query of ['?state=a', '?state=a&state=b', '?state=%ZZ'])
         assert.equal((await app.inject({ url: '/api/auth/callback' + query })).statusCode, 302);
       const states = [randomToken(), randomToken()];
+      const browser = randomToken();
+      const browserGeneration = await store.browserGeneration(browser);
       let cookie;
       for (const state of states) {
         const tx = {
+          phase: 'probe',
+          browser,
+          browserGeneration,
           binding: randomToken(),
           nonce: randomToken(),
           verifier: randomToken(),
@@ -175,7 +230,11 @@ test(
         await store.putTransaction(state, tx);
         const response = await app.inject({
           url: '/api/auth/callback?state=' + state + '&code=fixture',
-          headers: { cookie: txCookieName(state, false) + '=' + tx.binding, host: 'evil.test' },
+          headers: {
+            cookie:
+              txCookieName(state, false) + '=' + tx.binding + '; __Host-bg_browser=' + browser,
+            host: 'evil.test',
+          },
         });
         assert.equal(response.headers.location, config.origin + '/?ok=1');
         const set = response.headers['set-cookie'];

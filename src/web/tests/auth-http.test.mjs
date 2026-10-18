@@ -57,7 +57,6 @@ test(
       const r = await req('/api/auth/login?returnTo=%2F');
       assert.equal(r.status, 302);
       let q = await fetch(r.headers.get('location'), { redirect: 'manual' });
-      q = await fetch(new URL(q.headers.get('location'), p.issuer), { redirect: 'manual' });
       return { callback: new URL(q.headers.get('location')), binding: cookieOf(r) };
     }
     try {
@@ -92,9 +91,11 @@ test(
         1
       );
       for (const response of callbacks) {
-        const cleared = response.headers
-          .getSetCookie()
-          .find((c) => c.startsWith(tx.binding.split('=')[0] + '='));
+        const name = tx.binding
+          .split('; ')
+          .find((c) => c.startsWith('bg_oidc_tx_'))
+          .split('=')[0];
+        const cleared = response.headers.getSetCookie().find((c) => c.startsWith(name + '='));
         assert.match(cleared, /Path=\/api\/auth;/);
         assert.match(cleared, /Expires=Thu, 01 Jan 1970/);
       }
