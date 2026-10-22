@@ -32,7 +32,7 @@ jobs:
           version: 8.15.0
       - uses: actions/setup-node@v4
         with:
-          node-version: 22.22.0
+          node-version: 22.23.4
           cache: pnpm
           cache-dependency-path: |
             pnpm-lock.yaml
@@ -94,7 +94,18 @@ jobs:
         with:
           context: .
           push: false # Main/tags/PRs verify only; private publication is separately coordinated.
-          tags: ${{ steps.meta.outputs.tags }}
+          load: true
+          tags: |
+            ${{ steps.meta.outputs.tags }}
+            button-gremlin-ci:verify
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      - name: Exercise the built image runtime and native audio decoder
+        # No registry push, live credentials, Discord login or production storage.
+        run: |
+          docker run --rm \
+            -v "$PWD/src/services/runtime.test.mjs:/app/runtime.test.mjs:ro" \
+            -v "$PWD/tests/image-smoke.mjs:/app/image-smoke.mjs:ro" \
+            --entrypoint node button-gremlin-ci:verify \
+            --test runtime.test.mjs image-smoke.mjs
