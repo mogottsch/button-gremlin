@@ -1,4 +1,5 @@
-FROM node:22.22.0-alpine AS base
+# Retain Alpine 3.23 while applying the October 2026 Node/Brotli security release.
+FROM node:22.23.4-alpine3.23@sha256:6abbcf5dd6b231da109bcde1181db1d92bf78015ae1a9514d9807c1f857869db AS base
 
 RUN apk add --no-cache ffmpeg
 
