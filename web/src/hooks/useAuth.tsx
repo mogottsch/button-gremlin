@@ -1,8 +1,9 @@
-import { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { api } from '../services/api';
 import { setCsrfToken, subscribeAuthExpired } from '../services/request';
 import { isActivityLaunch, startActivity, type BrowserSession } from '../services/activity';
+import { setPublicEntry } from '../services/publicPageview';
 import {
   standaloneLogin,
   standaloneAuthenticated,
@@ -24,6 +25,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState('');
   const activity = isActivityLaunch();
   const [attempt, retry] = useState(0);
+  const analyticsGeneration = useRef(0);
   useEffect(() => {
     // A restored snapshot must revalidate cookies, not display an old signed-in UI.
     const restored = (event: PageTransitionEvent) => {
@@ -35,9 +37,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     localStorage.removeItem('apiKey');
     let alive = true;
+    let publicEntry = false;
+    const generation = ++analyticsGeneration.current;
+    setPublicEntry(false);
     setLoading(true);
     const unsubscribe = subscribeAuthExpired(() => {
       if (!alive) return;
+      analyticsGeneration.current++;
+      setPublicEntry(false);
       setSession({ authenticated: false });
       if (activity) retry((v) => v + 1);
       else if (!standaloneLogin()) setError('Your session expired. Please sign in again.');
@@ -50,7 +57,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setError('');
           if (!activity) {
             if (value.authenticated) standaloneAuthenticated();
-            else standaloneLogin();
+            else publicEntry = !standaloneLogin();
           }
         }
       })
@@ -63,18 +70,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           );
       })
       .finally(() => {
-        if (alive) setLoading(false);
+        if (alive) {
+          setLoading(false);
+          if (generation === analyticsGeneration.current) setPublicEntry(publicEntry);
+        }
       });
     return () => {
       alive = false;
+      setPublicEntry(false);
       unsubscribe();
     };
   }, [activity, attempt]);
   const login = useCallback(() => {
+    analyticsGeneration.current++;
+    setPublicEntry(false);
     if (activity) retry((v) => v + 1);
     else standaloneLogin(true);
   }, [activity]);
   const logout = useCallback(async () => {
+    analyticsGeneration.current++;
+    setPublicEntry(false);
     // Suppress before the POST so racing 401s cannot start an automatic login.
     if (!activity) suppressStandalone();
     try {
